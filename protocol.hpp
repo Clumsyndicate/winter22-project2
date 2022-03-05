@@ -17,11 +17,11 @@ struct header_t {
 #define MASK_F 0b001
 
 void processPacket(char* buf, ssize_t size) {
-    auto flags = (uint16_t) convert_slice(buf, 10, 12);
+    auto flags = (uint16_t) buf2int(buf, 10, 12);
     header_t h { 
-        convert_slice(buf, 0, 4),
-        convert_slice(buf, 4, 8),
-        (uint16_t) convert_slice(buf, 8, 10),
+        buf2int(buf, 0, 4),
+        buf2int(buf, 4, 8),
+        (uint16_t) buf2int(buf, 8, 10),
         flags & MASK_A,
         flags & MASK_S,
         flags & MASK_F,
@@ -36,4 +36,8 @@ void processPacket(char* buf, ssize_t size) {
 
 void sendPacket(header_t header, char* payload) {
     
+    char buf[1024];
+
+    int2buf(buf, header.seq, 0, 4);
+
 }
