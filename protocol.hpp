@@ -22,22 +22,29 @@ void processPacket(char* buf, ssize_t size) {
         buf2int(buf, 0, 4),
         buf2int(buf, 4, 8),
         (uint16_t) buf2int(buf, 8, 10),
-        flags & MASK_A,
-        flags & MASK_S,
-        flags & MASK_F,
+        (bool) (flags & MASK_A),
+        (bool) (flags & MASK_S),
+        (bool) (flags & MASK_F),
     };
 
     // debug
+    cout << "Size: " << size << endl;
     cout << "Seq: " << h.seq << endl;
     cout << "Ack: " << h.ack << endl;
     cout << "Cid: " << h.cid << endl;
     cout << "A: " << h.a << " S: " << h.s << " F: " << h.f << endl;
+    string payload {buf+12, (size_t) size-12};
+    cout << "Payload: " << endl;
+    cout << payload << endl;
 }
 
-void sendPacket(header_t header, char* payload) {
-    
-    char buf[1024];
-
+size_t formatSendPacket(char *buf, header_t header, const char* payload, ssize_t payloadSize) {
     int2buf(buf, header.seq, 0, 4);
+    int2buf(buf, header.ack, 4, 8);
+    int2buf(buf, header.cid, 8, 10);
+    buf[11] = MASK_A * header.a + MASK_S * header.s + MASK_F * header.f;
 
+    memcpy(buf + 12, payload, payloadSize);
+
+    return payloadSize + 12;
 }

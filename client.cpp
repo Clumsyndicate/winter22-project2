@@ -75,7 +75,8 @@ int main(int argc, const char * argv[]) {
     
     // Initialize socket, send dummy data to server.
     
-    strcpy(buffer, "hello world!");
+    // strcpy(buffer, "hello world!");
+    string payload { "hello world!" };
      
     
     memset(&socketAddress, 0, sizeof socketAddress);
@@ -84,7 +85,20 @@ int main(int argc, const char * argv[]) {
     socketAddress.sin_addr.s_addr = inet_addr(host);
     socketAddress.sin_port = htons(portNumber);
 
-    bytes_sent = sendto(sock, buffer, strlen(buffer), 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+    // Format buffer
+
+    // Send UDP packet src-ip=DEFAULT, src-port=DEFAULT, dst-ip=HOSTNAME-OR-IP, dst-port=PORT with SYN flag set, Connection ID initialized to 0, Sequence Number set to 12345, and Acknowledgement Number set to 0
+
+    header_t header {
+        12345, 
+        0,      
+        0,
+        false, true, false
+    };
+
+    auto packetSize = formatSendPacket(buffer, header, payload.c_str(), payload.size());
+    cout << "Final packet size: " << packetSize << endl;
+    bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     if (bytes_sent < 0) {
         perror("Sending to server failed.");
         exit(1);
