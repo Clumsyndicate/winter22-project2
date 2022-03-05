@@ -81,8 +81,9 @@ int main(int argc, const char * argv[]) {
             exit(1);
         }
         printf("recsize: %d\n ", (int)recsize);
-        // sleep(1);
         printf("datagram: %.*s\n", (int)recsize, buffer);
+
+        processPacket(buffer, recsize);
     }
     
     return 0;
