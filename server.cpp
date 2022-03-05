@@ -13,17 +13,23 @@
 #include <unistd.h>
 #include <dirent.h>
 
+#include "protocol.hpp"
+
+using namespace std;
+
+int sock;
+
 void signalHandler(int sig) {
-    // todo: clean up, graceful exit.
-    
-    
+    // todo: clean up, graceful exit.    
+    close(sock);
+
     // exit with code zero, as specified by the spec.
     exit(0);
 }
 
 int main(int argc, const char * argv[]) {
-    
-    int portNumber, sock;
+    cout << "hi" << endl;
+    int portNumber;
     struct sockaddr_in socketAddress;
     char buffer[1024];
     ssize_t recsize;
@@ -75,7 +81,7 @@ int main(int argc, const char * argv[]) {
             exit(1);
         }
         printf("recsize: %d\n ", (int)recsize);
-        sleep(1);
+        // sleep(1);
         printf("datagram: %.*s\n", (int)recsize, buffer);
     }
     
