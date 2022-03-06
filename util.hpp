@@ -7,7 +7,7 @@ const double RETRANSMISSION_TIMER = 5.0e8; // 0.5 seconds
 const int MIN_CWND = 512; // bytes
 const int MAX_CWND = 51200; // bytes
 const int RWND = 51200; // bytes
-const int INIT_SS_THRESH = 10000 // bytes
+const int INIT_SS_THRESH = 10000; // bytes
 
 
 uint32_t buf2int(const char *s, size_t a, size_t b) {
