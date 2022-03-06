@@ -28,15 +28,17 @@ header_t getHeader(char* buf, ssize_t size) {
     };
     // debug
     cout << "Recv'd packet" << endl;
-    cout << "Size: " << size << ", Seq: " << h.seq << ", Cid: " << h.cid << endl;
+    cout << "Size: " << size << ", Seq: " << h.seq << ", Ack: " << h.ack << ", Cid: " << h.cid << endl;
     cout << "A: " << h.a << " S: " << h.s << " F: " << h.f << endl;
     return h;
 }
 
 string getPayload(char* buf, ssize_t size) {
     string payload {buf+12, (size_t) size-12};
-    cout << "Payload: " << endl;
-    cout << payload << endl << endl;
+    if (size > 0) {
+        cout << "Payload: " << endl;
+        cout << payload << endl << endl;
+    }
     return payload;
 }
 
@@ -45,8 +47,9 @@ size_t formatSendPacket(char *buf, header_t header, const char* payload, ssize_t
     int2buf(buf, header.ack, 4, 8);
     int2buf(buf, header.cid, 8, 10);
     buf[11] = MASK_A * header.a + MASK_S * header.s + MASK_F * header.f;
-
-    memcpy(buf + 12, payload, payloadSize);
+    
+    if (payload != nullptr && payloadSize != 0)
+        memcpy(buf + 12, payload, payloadSize);
 
     return payloadSize + 12;
 }

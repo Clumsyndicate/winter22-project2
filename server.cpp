@@ -22,7 +22,8 @@ using namespace std;
 
 int sock;
 
-unordered_map<int, Connection> connections;
+unordered_map<uint16_t, Connection> connections;
+uint16_t connCnt = 1;
 
 void signalHandler(int sig) {
     // todo: clean up, graceful exit.    
@@ -86,24 +87,53 @@ int main(int argc, const char * argv[]) {
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout); */
 
     for (;;) {
-        recsize = recvfrom(sock, (void*)buffer, sizeof buffer, 0, (struct sockaddr*)&socketAddress, &fromlen);
+        struct sockaddr sender;
+        recsize = recvfrom(sock, (void*)buffer, sizeof buffer, 0, &sender, &fromlen);
         if (recsize < 0) {
-            std::cerr << "Negative receive size.";
+            perror("Negative receive size.");
             exit(1);
         }
-        printf("recsize: %d\n ", (int)recsize);
-        printf("datagram: %.*s\n", (int)recsize, buffer);
 
         auto header = getHeader(buffer, recsize);
         auto payload = getPayload(buffer, recsize);
 
 
         if (header.s) {
+            cout << "Received handshake request" << endl;
             // After receiving a packet with SYN flag, the server should create state for the connection ID and proceed with 3-way handshake for this connection. Server should use 4321 as initial sequence number.
+            header_t resHeader {
+                4321,
+                header.seq + 1,
+                connCnt,
+                true, true, false 
+            };
+            // Create new connection with unique id
+            connections.emplace(connCnt, Connection { connCnt, sender });
 
+            char sendBuffer[1024];
+            auto packetSize = formatSendPacket(sendBuffer, resHeader, nullptr, 0);
 
-
+            sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
             
+            connCnt += 1;
+            continue;
+        }
+
+        if (header.a) {
+            // Client ack
+            cout << "Received client " << header.cid << " ack" << endl;
+            if (connections.find(header.cid) == connections.end()) {
+                // Invalid header cid, not found in connections
+                cerr << "Invalid header cid, not found in connections" << endl;
+                continue;
+            }
+            connections[header.cid].state = CState::STARTED;
+        }
+
+        if (connections.find(header.cid) != connections.end()) {
+            
+        } else {
+            // Error connection id is not in connections.
         }
     }
     

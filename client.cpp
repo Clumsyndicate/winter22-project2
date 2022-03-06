@@ -29,7 +29,7 @@ int main(int argc, const char * argv[]) {
     // Validate cml arguments.
     
     if (argc != 4) {
-        std::cerr << "ERROR: Invalid number of arguments. Need IP address, port number, and destination directory.";
+        std::cerr << "ERROR: Invalid number of arguments. Need IP address, port number, and filename to send";
         
         exit(1);
     }
@@ -96,6 +96,30 @@ int main(int argc, const char * argv[]) {
 
     auto packetSize = formatSendPacket(buffer, header, payload.c_str(), payload.size());
     cout << "Final packet size: " << packetSize << endl;
+    bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+    if (bytes_sent < 0) {
+        perror("Sending to server failed.");
+        exit(1);
+    }
+
+    // Listens for server response
+    auto recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
+
+    if (recsize < 0) {
+        std::cerr << "Negative receive size.";
+        exit(1);
+    }
+
+    auto synHeader = getHeader(buffer, recsize);
+
+    header_t ackHeader {
+        synHeader.ack,
+        synHeader.seq + 1,
+        synHeader.cid,
+        true, false, false
+    };
+
+    packetSize = formatSendPacket(buffer, ackHeader, nullptr, 0);
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     if (bytes_sent < 0) {
         perror("Sending to server failed.");
