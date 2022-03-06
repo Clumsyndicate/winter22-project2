@@ -13,11 +13,16 @@
 #include <unistd.h>
 #include <dirent.h>
 
+#include <unordered_map>
+
 #include "protocol.hpp"
+#include "connection.hpp"
 
 using namespace std;
 
 int sock;
+
+unordered_map<int, Connection> connections;
 
 void signalHandler(int sig) {
     // todo: clean up, graceful exit.    
@@ -28,7 +33,7 @@ void signalHandler(int sig) {
 }
 
 int main(int argc, const char * argv[]) {
-    cout << "hi" << endl;
+    cout << "Hi, welcome to this dysfunctional udp server" << endl;
     int portNumber;
     struct sockaddr_in socketAddress;
     char buffer[1024];
@@ -73,6 +78,12 @@ int main(int argc, const char * argv[]) {
         close(sock);
         exit(1);
     }
+    // Uncomment to make recvfrom nonblocking
+    /*
+    struct timeval read_timeout;
+    read_timeout.tv_sec = 0;
+    read_timeout.tv_usec = 10;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout); */
 
     for (;;) {
         recsize = recvfrom(sock, (void*)buffer, sizeof buffer, 0, (struct sockaddr*)&socketAddress, &fromlen);
@@ -83,7 +94,17 @@ int main(int argc, const char * argv[]) {
         printf("recsize: %d\n ", (int)recsize);
         printf("datagram: %.*s\n", (int)recsize, buffer);
 
-        processPacket(buffer, recsize);
+        auto header = getHeader(buffer, recsize);
+        auto payload = getPayload(buffer, recsize);
+
+
+        if (header.s) {
+            // After receiving a packet with SYN flag, the server should create state for the connection ID and proceed with 3-way handshake for this connection. Server should use 4321 as initial sequence number.
+
+
+
+            
+        }
     }
     
     return 0;

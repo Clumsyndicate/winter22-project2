@@ -45,9 +45,7 @@ int main(int argc, const char * argv[]) {
         exit(1);
     }
 
-    
-    
-    //todo:: validate hostname or IP address.
+    // validate hostname or IP address.
     
     struct addrinfo hints;
     struct addrinfo *res, *tmp;

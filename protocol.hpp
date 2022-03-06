@@ -16,7 +16,7 @@ struct header_t {
 #define MASK_S 0b010
 #define MASK_F 0b001
 
-void processPacket(char* buf, ssize_t size) {
+header_t getHeader(char* buf, ssize_t size) {
     auto flags = (uint16_t) buf2int(buf, 10, 12);
     header_t h { 
         buf2int(buf, 0, 4),
@@ -26,16 +26,18 @@ void processPacket(char* buf, ssize_t size) {
         (bool) (flags & MASK_S),
         (bool) (flags & MASK_F),
     };
-
     // debug
-    cout << "Size: " << size << endl;
-    cout << "Seq: " << h.seq << endl;
-    cout << "Ack: " << h.ack << endl;
-    cout << "Cid: " << h.cid << endl;
+    cout << "Recv'd packet" << endl;
+    cout << "Size: " << size << ", Seq: " << h.seq << ", Cid: " << h.cid << endl;
     cout << "A: " << h.a << " S: " << h.s << " F: " << h.f << endl;
+    return h;
+}
+
+string getPayload(char* buf, ssize_t size) {
     string payload {buf+12, (size_t) size-12};
     cout << "Payload: " << endl;
-    cout << payload << endl;
+    cout << payload << endl << endl;
+    return payload;
 }
 
 size_t formatSendPacket(char *buf, header_t header, const char* payload, ssize_t payloadSize) {
