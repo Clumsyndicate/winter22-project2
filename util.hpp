@@ -1,5 +1,15 @@
 #include <stdlib.h>
 
+const int MAX_PACKET_SIZE = 524; // 512 bytes of payload + 12 bytes of header
+const int MAX_SEQ_NUM = 102400;
+const int MAX_ACK_NUM = 102400;
+const double RETRANSMISSION_TIMER = 5.0e8; // 0.5 seconds
+const int MIN_CWND = 512; // bytes
+const int MAX_CWND = 51200; // bytes
+const int RWND = 51200; // bytes
+const int INIT_SS_THRESH = 10000 // bytes
+
+
 uint32_t buf2int(const char *s, size_t a, size_t b) {
     int val = 0;
     while (a < b) {
