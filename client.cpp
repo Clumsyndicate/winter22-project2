@@ -13,6 +13,8 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <netdb.h>
+#include <chrono>
+#include "chrono_io"
 
 #include "protocol.hpp"
 
@@ -125,6 +127,9 @@ int main(int argc, const char * argv[]) {
         perror("Sending to server failed.");
         exit(1);
     }
+
+
+
 
     close(sock);
     return 0;
