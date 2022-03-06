@@ -90,8 +90,8 @@ int main(int argc, const char * argv[]) {
     // Send UDP packet src-ip=DEFAULT, src-port=DEFAULT, dst-ip=HOSTNAME-OR-IP, dst-port=PORT with SYN flag set, Connection ID initialized to 0, Sequence Number set to 12345, and Acknowledgement Number set to 0
 
     header_t header {
-        12345, 
-        0,      
+        12345,
+        0,
         0,
         false, true, false
     };
@@ -126,6 +126,47 @@ int main(int argc, const char * argv[]) {
     if (bytes_sent < 0) {
         perror("Sending to server failed.");
         exit(1);
+    }
+    
+    
+    // Start the file transfer process. First open the file and get its size.
+    FILE *fd = fopen(argv[3], "rb");
+    fseek(fd, 0, SEEK_END);
+    
+    // Maximum file size 100MB. Using int is fine.
+    int fileSize = ftell(fd);
+    fseek(fd, 0, SEEK_SET);
+    
+    // Initialize cwnd;
+    int cwnd = 512;
+    
+    while(fileSize > 0) {
+        // Assuming that cwnd is properly handled, and is no larger than the maximum size allowed.
+        int payloadSize = cwnd - 12;
+        char buffer[cwnd];
+        char * payloadBuffer = new char [payloadSize];
+        bzero(payloadBuffer, payloadSize);
+        
+        if (fread(payloadBuffer, 1, payloadSize, fd) < 0) {
+            std::cerr << "ERROR: Failed to read from file.";
+            close(sock);
+            fclose(fd);
+            exit(1);
+        }
+        
+        // William, please update the header value.
+        header_t payloadHeader {
+            0,
+            0,
+            0,
+            false, false, false
+        };
+        
+        // Buffer will hold the entire packet (header + payload).
+        packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, payloadSize);
+        bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+
+        fileSize -= payloadSize;
     }
 
 
