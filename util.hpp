@@ -1,9 +1,11 @@
 #include <stdlib.h>
 
 const int MAX_PACKET_SIZE = 524; // 512 bytes of payload + 12 bytes of header
+const int MAX_PAYLOAD_SIZE = 512; // 512 bytes
 const int MAX_SEQ_NUM = 102400;
 const int MAX_ACK_NUM = 102400;
-const double RETRANSMISSION_TIMER = 5.0e8; // 0.5 seconds
+const int RETRANSMISSION_TIMER = 5e2; // 0.5 seconds or 500 miliseconds
+const int TIMEOUT_TIMER = 1e4; // 10 seconds or 10000 miliseconds
 const int MIN_CWND = 512; // bytes
 const int MAX_CWND = 51200; // bytes
 const int RWND = 51200; // bytes

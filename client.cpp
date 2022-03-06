@@ -19,7 +19,13 @@
 #include "protocol.hpp"
 
 using namespace std;
+typedef chrono::high_resolution_clock Clock;
 
+// Abort connection after 10 seconds of silence from server. Closes socket.
+int abort_connection(int sock) {
+    close(sock);
+    exit(-1);
+}
 
 int main(int argc, const char * argv[]) {
     
@@ -28,6 +34,7 @@ int main(int argc, const char * argv[]) {
     int bytes_sent;
     char buffer[200];
     
+    ////////////////////////////////////////////////
     // Validate cml arguments.
     
     if (argc != 4) {
@@ -47,6 +54,7 @@ int main(int argc, const char * argv[]) {
         exit(1);
     }
 
+    ////////////////////////////////////////////////
     // validate hostname or IP address.
     
     struct addrinfo hints;
@@ -73,22 +81,22 @@ int main(int argc, const char * argv[]) {
 
     freeaddrinfo(res);
     
+    ////////////////////////////////////////////////
     // Initialize socket, send dummy data to server.
     
-    // strcpy(buffer, "hello world!");
     string payload { "hello world!" };
      
-    
     memset(&socketAddress, 0, sizeof socketAddress);
 
     socketAddress.sin_family = AF_INET;
     socketAddress.sin_addr.s_addr = inet_addr(host);
     socketAddress.sin_port = htons(portNumber);
 
+    ////////////////////////////////////////////////
     // Format buffer
 
-    // Send UDP packet src-ip=DEFAULT, src-port=DEFAULT, dst-ip=HOSTNAME-OR-IP, dst-port=PORT with SYN flag set, Connection ID initialized to 0, Sequence Number set to 12345, and Acknowledgement Number set to 0
-
+    // Send UDP packet src-ip=DEFAULT, src-port=DEFAULT, dst-ip=HOSTNAME-OR-IP, dst-port=PORT with SYN flag set, 
+    // Connection ID initialized to 0, Sequence Number set to 12345, and Acknowledgement Number set to 0
     header_t header {
         12345,
         0,
@@ -104,7 +112,17 @@ int main(int argc, const char * argv[]) {
         exit(1);
     }
 
+    // Timeout after 10 seconds of inactivity from server
+    struct pollfd pfd = {.fd = sock, .events = POLLIN};
+    ret = poll(&pfd, 1, TIMEOUT_TIMER);
+    if (ret <= 0) {
+        // if polling error or timeout
+        abort_connection(sock);
+    }
+    
+    ////////////////////////////////////////////////
     // Listens for server response
+
     auto recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
 
     if (recsize < 0) {
@@ -114,10 +132,13 @@ int main(int argc, const char * argv[]) {
 
     auto synHeader = getHeader(buffer, recsize);
 
+    ////////////////////////////////////////////////
+    // Send Ack packet (no payload)
+
     header_t ackHeader {
         synHeader.ack,
         synHeader.seq + 1,
-        synHeader.cid,
+        synHeader.cid,  // use server-assigned connection ID
         true, false, false
     };
 
@@ -127,7 +148,17 @@ int main(int argc, const char * argv[]) {
         perror("Sending to server failed.");
         exit(1);
     }
+
+    // // timeout after 10 seconds of inactivity from server
+    // struct pollfd pfd = {.fd = sock, .events = POLLIN};
+    // ret = poll(&pfd, 1, TIMEOUT_TIMER);
+    // if (ret <= 0) {
+    //     // if polling error or timeout
+    //     abort_connection(sock);
+    // }
     
+    ////////////////////////////////////////////////
+    // Send payload with congestion control
     
     // Start the file transfer process. First open the file and get its size.
     FILE *fd = fopen(argv[3], "rb");
@@ -138,35 +169,95 @@ int main(int argc, const char * argv[]) {
     fseek(fd, 0, SEEK_SET);
     
     // Initialize cwnd;
-    int cwnd = 512;
-    
-    while(fileSize > 0) {
-        // Assuming that cwnd is properly handled, and is no larger than the maximum size allowed.
-        int payloadSize = cwnd - 12;
-        char buffer[cwnd];
-        char * payloadBuffer = new char [payloadSize];
-        bzero(payloadBuffer, payloadSize);
-        
-        if (fread(payloadBuffer, 1, payloadSize, fd) < 0) {
-            std::cerr << "ERROR: Failed to read from file.";
-            close(sock);
-            fclose(fd);
-            exit(1);
-        }
-        
-        // William, please update the header value.
-        header_t payloadHeader {
-            0,
-            0,
-            0,
-            false, false, false
-        };
-        
-        // Buffer will hold the entire packet (header + payload).
-        packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, payloadSize);
-        bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+    int cwnd = MIN_CWND;
+    int ss_thresh = INIT_SS_THRESH;
 
-        fileSize -= payloadSize;
+    int acked_bytes;
+    int sent_bytes = 0;
+
+    while (sent_bytes < fileSize) {
+
+        // Tracks how many packets are sent in this congestion window
+        int packets_sent = 0;
+
+        // Congestion Window: send a total of cwnd bytes in several packets
+        while (cwnd > 0) {
+
+            // If have cwnd quota left but ran out of file, exit this loop and go to the ack loop
+            if (sent_bytes >= fileSize) {
+                break;
+            }
+
+            // Expected payload size is either max UDP payload size or the remaining cwnd quota
+            int payloadSize = min(MAX_PAYLOAD_SIZE, cwnd);
+            char buffer[MAX_PACKET_SIZE];               // TODO: IS THIS RIGHT??
+            char * payloadBuffer = new char [payloadSize];
+            bzero(payloadBuffer, payloadSize);            
+
+            // actualSize might be smaller than the expected payloadSize
+            actualSize = fread(payloadBuffer, 1, payloadSize, fd)
+            if (actualSize < 0) {
+                std::cerr << "ERROR: Failed to read from file.";
+                close(sock);
+                fclose(fd);
+                exit(1);
+            }
+
+            header_t payloadHeader { ///////////////////////////////////////// TODO
+                0,   
+                0,
+                my_cid,
+                false, false, false
+            };
+
+            // Buffer will hold the entire packet (header + payload).
+            packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, actualSize);
+            bytes_sent = sendto(sock, buffer, packetSize, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
+
+            sent_bytes += actualSize;
+            packets_sent += 1;
+        }
+
+        // Listens for ack. For each expected ack, adjst parameter if received. Retransmit (and adjust parameter) if timeout through polling after 0.5 seconds
+        while (packets_sent > 0) {
+
+            // TODO: Problem with this implementation: Can't deal with out of order arrival
+            // For each sent packet, retransmit after 0.5 seconds of inactivity from server
+            struct pollfd pfd = {.fd = sock, .events = POLLIN};
+            ret = poll(&pfd, 1, RETRANSMISSION_TIMER);
+            if (ret < 0) {
+                // If polling error
+                abort_connection(sock);
+            } else if (ret == 0) {
+                // If need retransmission, first adjust parameters
+                ss_thresh = cwnd / 2;
+                cwnd = MIN_CWND;
+                // Then restore sent_bytes to be right after the last acked packet
+                sent_bytes = acked_bytes;
+                packets_sent = 0;
+                break;
+            }
+
+            auto recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
+
+            if (recsize < 0) {
+                std::cerr << "Negative receive size.";
+                exit(1);
+            }
+
+            auto synHeader = getHeader(buffer, recsize);
+            // TODO: Check ack number / seq number
+
+            // Adjust parameters for successful transmission of one packet
+            if (cwnd < ss_thresh) {
+                cwnd += MAX_PACKET_SIZE;
+            } else {
+                cwnd += MAX_PACKET_SIZE * MAX_PACKET_SIZE / cwnd;
+            }
+
+            packets_sent -= 1;
+            acked_bytes += MAX_PAYLOAD_SIZE;
+        }
     }
 
 
