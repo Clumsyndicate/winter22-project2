@@ -184,6 +184,9 @@ int main(int argc, const char * argv[]) {
     
     while (sent_through_bytes < file_size) {
 
+        // Reposition the file descriptor to be at a certain offset (for retransmission)
+        fseek(fd, sent_through_bytes, SEEK_SET);
+
         // Reset retransmission flag
         retransmission_triggered = false;
 
@@ -233,6 +236,7 @@ int main(int argc, const char * argv[]) {
             acknum_time_map[expected_acknum] = chrono::system_clock::now();
 
             sent_bytes += actual_payload_size;
+            cwnd -= actual_payload_size;
             packets_sent += 1;
         }
 
@@ -300,6 +304,8 @@ int main(int argc, const char * argv[]) {
                 cwnd += MAX_PACKET_SIZE * MAX_PACKET_SIZE / cwnd;
             }
 
+            // This value is to locate the point in the file to restart transmission if retransmission is triggered.
+            // Only the last packet could have a size that is not MAX_PAYLOAD_SIZE, 
             sent_through_bytes += MAX_PAYLOAD_SIZE;
         }
     }
