@@ -135,7 +135,7 @@ int main(int argc, const char * argv[]) {
     fseek(fd, 0, SEEK_END);
     
     // Maximum file size 100MB. Using int is fine.
-    int fileSize = ftell(fd);
+    long fileSize = ftell(fd);
     cout << "File size is " << fileSize << endl;
     fseek(fd, 0, SEEK_SET);
     
@@ -148,14 +148,15 @@ int main(int argc, const char * argv[]) {
         cid,
         false, false, false
     };
+
+    size_t bytesRead = 1;
     
-    while(fileSize > 0) {
+    while(bytesRead > 0) {
         // Assuming that cwnd is properly handled, and is no larger than the maximum size allowed.
         int payloadSize = cwnd - 12;
         char buffer[cwnd];
         char * payloadBuffer = new char [payloadSize];
         bzero(payloadBuffer, payloadSize);
-        size_t bytesRead;
         if ((bytesRead = fread(payloadBuffer, 1, payloadSize, fd)) < 0) {
             std::cerr << "ERROR: Failed to read from file.";
             close(sock);
@@ -168,7 +169,7 @@ int main(int argc, const char * argv[]) {
         packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, bytesRead);
         bytes_sent = sendto(sock, buffer, packetSize, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
 
-        fileSize -= payloadSize;
+        fileSize -= bytesRead;
 
         payloadHeader.seq += payloadSize;
         cout << "New seq " << payloadHeader.seq << endl;
@@ -178,7 +179,10 @@ int main(int argc, const char * argv[]) {
     read_timeout.tv_sec = 0;
     read_timeout.tv_usec = 10;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
-    
+
+    cout << "Finished sending the file" << endl;
+    cout << "File size is " << fileSize << endl;
+
     // Payload sent, disconnect
     header_t finHeader {
         0,

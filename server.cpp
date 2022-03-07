@@ -187,7 +187,6 @@ int main(int argc, const char * argv[]) {
                     conn.head += payload.size();
 
                     // If this packet is the next seq expected
-                    // FILE * f = fopen("a.txt", "a+");
                     cout << "Fptr here: " << conn.file << endl;
                    if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
                     // if (fwrite(payload.c_str(), 1, payload.size(), f) < 0) {
