@@ -140,7 +140,7 @@ int main(int argc, const char * argv[]) {
     fseek(fd, 0, SEEK_SET);
     
     // Initialize cwnd;
-    int cwnd = 512;
+    int cwnd = 50000;
 
     header_t payloadHeader {
         ackHeader.seq,
@@ -173,8 +173,11 @@ int main(int argc, const char * argv[]) {
         payloadHeader.seq += payloadSize;
         cout << "New seq " << payloadHeader.seq << endl;
     }
-
-    sleep(10000);
+    
+    struct timeval read_timeout;
+    read_timeout.tv_sec = 0;
+    read_timeout.tv_usec = 10;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
     
     // Payload sent, disconnect
     header_t finHeader {
@@ -184,7 +187,7 @@ int main(int argc, const char * argv[]) {
         false, false, true
     };
     
-    // Don't include anything in the payload;
+    // Don't include anything in the payload
     packetSize = formatSendPacket(buffer, finHeader, nullptr, 0);
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     
@@ -199,7 +202,11 @@ int main(int argc, const char * argv[]) {
     // Expect an ACK packet
     // todo: what if never gets one? Should we include this part in the 2 seconds wait and close the connection after?
     recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
-    auto finAckHeader = getHeader(buffer, recsize);
+    header_t finAckHeader;
+    if (recsize > 0) {
+        finAckHeader = getHeader(buffer, recsize);
+    }
+    
     
     if (finAckHeader.f) {
         //todo: what to do? Spec doesn't say a thing lmao
@@ -212,29 +219,33 @@ int main(int argc, const char * argv[]) {
     
     // Until 2000 mili seconds passed
     while (std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() < 2000) {
-        cout << "a";
         recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
-        auto finWaitHeader = getHeader(buffer, recsize);
+        header_t finWaitHeader;
         
-        // Only responds to a FIN packet
-        if (finWaitHeader.f) {
-            // Weird name but meh
-            header_t ackFinAckHeader {
-                0,
-                0,
-                cid,
-                true, false, false
-            };
+        if (recsize > 1) {
+            finWaitHeader = getHeader(buffer, recsize);
             
-            packetSize = formatSendPacket(buffer, ackFinAckHeader, nullptr, 0);
-            bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
-            
-            if (bytes_sent < 0) {
-                std::cerr << "Failed to send the ACK for the FIN-ACK packet.";
-                close(sock);
-                exit(1);
+            if (finWaitHeader.f) {
+                // Weird name but meh
+                header_t ackFinAckHeader {
+                    0,
+                    0,
+                    cid,
+                    true, false, false
+                };
+                
+                packetSize = formatSendPacket(buffer, ackFinAckHeader, nullptr, 0);
+                bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+                
+                if (bytes_sent < 0) {
+                    std::cerr << "Failed to send the ACK for the FIN-ACK packet.";
+                    close(sock);
+                    exit(1);
+                }
             }
         }
+        // Only responds to a FIN packet
+        
         
         end = std::chrono::steady_clock::now();
     }
