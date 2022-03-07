@@ -22,9 +22,9 @@ using namespace std;
 
 int main(int argc, const char * argv[]) {
     
-    int portNumber, sock;
+    int portNumber, sock, bytes_sent;
+    uint16_t cid;
     struct sockaddr_in socketAddress;
-    int bytes_sent;
     char buffer[200];
     
     // Validate cml arguments.
@@ -75,7 +75,7 @@ int main(int argc, const char * argv[]) {
     // Initialize socket, send dummy data to server.
     
     // strcpy(buffer, "hello world!");
-    string payload { "hello world!" };
+    // string payload { "hello world!" };
      
     
     memset(&socketAddress, 0, sizeof socketAddress);
@@ -95,7 +95,8 @@ int main(int argc, const char * argv[]) {
         false, true, false
     };
 
-    auto packetSize = formatSendPacket(buffer, header, payload.c_str(), payload.size());
+    
+    auto packetSize = formatSendPacket(buffer, header, nullptr, 0);
     cout << "Final packet size: " << packetSize << endl;
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     if (bytes_sent < 0) {
@@ -112,11 +113,12 @@ int main(int argc, const char * argv[]) {
     }
 
     auto synHeader = getHeader(buffer, recsize);
-
+    cid = synHeader.cid;
+    
     header_t ackHeader {
         synHeader.ack,
         synHeader.seq + 1,
-        synHeader.cid,
+        cid,
         true, false, false
     };
 
@@ -142,7 +144,7 @@ int main(int argc, const char * argv[]) {
     header_t payloadHeader {
         ackHeader.seq,
         ackHeader.ack,
-        ackHeader.cid,
+        cid,
         false, false, false
     };
     
@@ -162,13 +164,77 @@ int main(int argc, const char * argv[]) {
         
         // Buffer will hold the entire packet (header + payload).
         packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, payloadSize);
-        bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+        bytes_sent = sendto(sock, buffer, packetSize, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
 
         fileSize -= payloadSize;
 
         payloadHeader.seq += payloadSize;
     }
-
+    
+    // Payload sent, disconnect
+    header_t finHeader {
+        0,
+        0,
+        cid,
+        false, false, true
+    };
+    
+    // Don't include anything in the payload;
+    packetSize = formatSendPacket(buffer, finHeader, nullptr, 0);
+    bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+    
+    cout << "Sent fin packet" << endl;
+    
+    if (bytes_sent < 0) {
+        std::cerr << "Failed to send FIN packet." << endl;
+        close(sock);
+        exit(1);
+    }
+    
+    // Expect an ACK packet
+    // todo: what if never gets one? Should we include this part in the 2 seconds wait and close the connection after?
+    recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
+    auto finAckHeader = getHeader(buffer, recsize);
+    
+    if (finAckHeader.f) {
+        //todo: what to do? Spec doesn't say a thing lmao
+        cout << "Received FIN-ACK from server." << endl;
+    }
+    
+    // Wait for two seconds, responde every FIN packet with an ACK and drop all others.
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    
+    // Until 2000 mili seconds passed
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() < 2000) {
+        cout << "a";
+        recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
+        auto finWaitHeader = getHeader(buffer, recsize);
+        
+        // Only responds to a FIN packet
+        if (finWaitHeader.f) {
+            // Weird name but meh
+            header_t ackFinAckHeader {
+                0,
+                0,
+                cid,
+                true, false, false
+            };
+            
+            packetSize = formatSendPacket(buffer, ackFinAckHeader, nullptr, 0);
+            bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+            
+            if (bytes_sent < 0) {
+                std::cerr << "Failed to send the ACK for the FIN-ACK packet.";
+                close(sock);
+                exit(1);
+            }
+        }
+        
+        end = std::chrono::steady_clock::now();
+    }
+    
+    // After two seconds, close the connection.
     fclose(fd);
     close(sock);
     return 0;

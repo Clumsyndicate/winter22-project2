@@ -26,7 +26,7 @@ unordered_map<uint16_t, Connection> connections;
 uint16_t connCnt = 1;
 
 void signalHandler(int sig) {
-    // todo: clean up, graceful exit.    
+    // todo: clean up, graceful exit.
     close(sock);
 
     // exit with code zero, as specified by the spec.
@@ -74,7 +74,7 @@ int main(int argc, const char * argv[]) {
     fromlen = sizeof socketAddress;
 
     sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (bind(sock, (struct sockaddr *)&socketAddress, sizeof socketAddress) == -1) {
+    if (::bind(sock, (struct sockaddr *)&socketAddress, sizeof socketAddress) == -1) {
         std::cerr << "ERROR: Failed to bind socket.";
         close(sock);
         exit(1);
@@ -104,7 +104,7 @@ int main(int argc, const char * argv[]) {
                 4321,
                 header.seq + 1,
                 connCnt,
-                true, true, false 
+                true, true, false
             };
             // Create new connection with unique id
             connections.emplace(connCnt, Connection { connCnt, sender });
@@ -134,51 +134,65 @@ int main(int argc, const char * argv[]) {
             continue;
         }
 
+        // After receiving a FIN, send an ACK and FIN back to back (but not closing the socket).
         if (header.f) {
             cout << "Received Fin request" << endl;
-            // After receiving a packet with SYN flag, the server should create state for the connection ID and proceed with 3-way handshake for this connection. Server should use 4321 as initial sequence number.
-            header_t resHeader {
+            
+            header_t ackHeader {
                 header.ack,
                 header.seq + 1,
                 header.cid,
-                true, false, false 
+                true, false, false
             };
 
             char sendBuffer[1024];
-            auto packetSize = formatSendPacket(sendBuffer, resHeader, nullptr, 0);
-
+            auto packetSize = formatSendPacket(sendBuffer, ackHeader, nullptr, 0);
             sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
             
-            connCnt += 1;
+            header_t finHeader {
+                header.ack + 1,
+                0,
+                header.cid,
+                false, false, true
+            };
+            
+            packetSize = formatSendPacket(sendBuffer, finHeader, nullptr, 0);
+            sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
+            
+            // Now change the status of this connection to ended.
+            connections[header.cid].state = CState::ENDED;
+            cout << "Connection closed." << endl;
+            
             continue;
         }
 
         if (connections.find(header.cid) != connections.end()) {
-            // Received packet 
+            // Received packet
             auto& conn = connections[header.cid];
+
             if (conn.state == CState::STARTED) {
                 // Connection handshake is appropriate
                 
                 if (conn.head == header.seq) {
                     conn.head += payload.size();
+
                     // If this packet is the next seq expected
-                    if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
+                    FILE * f = fopen("a.txt", "a+");
+//                    if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
+                    if (fwrite(payload.c_str(), 1, payload.size(), f) < 0) {
                         perror("Write failed");
                         // TODO : handle error
                     }
-
                 } else {
                     conn.queue.emplace(header.seq, DataPacket { header.seq, (uint32_t) payload.size(), payload });
                 }
 
                 // Check if out-of-order packets in the queue can now be written
-
                 for (auto& packet: conn.queue) {
                     if (packet.first == conn.head) {
                         if (fwrite(packet.second.payload.c_str(), 1, payload.size(), conn.file) < 0) {
                             perror("Write failed");
                             // TODO : handle error
-
                         }
                         conn.head += packet.second.size;
                     }
@@ -189,7 +203,7 @@ int main(int argc, const char * argv[]) {
                     header.ack,
                     header.seq + (uint32_t) payload.size(),
                     conn.cid,
-                    true, false, false 
+                    true, false, false
                 };
 
                 char sendBuffer[1024];
