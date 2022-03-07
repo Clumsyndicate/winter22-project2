@@ -14,6 +14,7 @@
 #include <dirent.h>
 #include <netdb.h>
 #include <chrono>
+#include <poll.h>
 
 #include "protocol.hpp"
 
@@ -84,7 +85,6 @@ int main(int argc, const char * argv[]) {
     
     // strcpy(buffer, "hello world!");
     string payload { "hello world!" };
-     
     
     memset(&socketAddress, 0, sizeof socketAddress);
 
@@ -112,6 +112,14 @@ int main(int argc, const char * argv[]) {
         exit(1);
     }
 
+    // Timeout after 10 seconds of inactivity from server
+    struct pollfd pfd = {.fd = sock, .events = POLLIN};
+    ret = poll(&pfd, 1, TIMEOUT_TIMER);
+    if (ret <= 0) {
+        // if polling error or timeout
+        abort_connection(sock);
+    }
+
     ////////////////////////////////////////////////
     // Listens for server response
 
@@ -137,7 +145,13 @@ int main(int argc, const char * argv[]) {
         perror("Sending to server failed.");
         exit(1);
     }
-    
+
+    // Timeout after 10 seconds of inactivity from server
+    ret = poll(&pfd, 1, TIMEOUT_TIMER);
+    if (ret <= 0) {
+        // if polling error or timeout
+        abort_connection(sock);
+    }
     
     // Start the file transfer process. First open the file and get its size.
     FILE *fd = fopen(argv[3], "rb");
