@@ -104,9 +104,9 @@ int main(int argc, const char * argv[]) {
         false, true, false
     };
 
-    auto packetSize = formatSendPacket(buffer, header, payload.c_str(), payload.size());
-    cout << "Final packet size: " << packetSize << endl;
-    bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+    auto packet_size = formatSendPacket(buffer, header, payload.c_str(), payload.size());
+    cout << "Final packet size: " << packet_size << endl;
+    bytes_sent = sendto(sock, buffer, packet_size, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     if (bytes_sent < 0) {
         perror("Sending to server failed.");
         exit(1);
@@ -142,8 +142,8 @@ int main(int argc, const char * argv[]) {
         true, false, false
     };
 
-    packetSize = formatSendPacket(buffer, ackHeader, nullptr, 0);
-    bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+    packet_size = formatSendPacket(buffer, ackHeader, nullptr, 0);
+    bytes_sent = sendto(sock, buffer, packet_size, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     if (bytes_sent < 0) {
         perror("Sending to server failed.");
         exit(1);
@@ -164,40 +164,58 @@ int main(int argc, const char * argv[]) {
     fseek(fd, 0, SEEK_END);
     
     // Maximum file size 100MB. Using int is fine.
-    int fileSize = ftell(fd);
+    int file_size = ftell(fd);
     fseek(fd, 0, SEEK_SET);
     
-    // Initialize cwnd;
-    int cwnd = 512;
-
-    header_t payloadHeader {
-        ackHeader.seq,
-        ackHeader.ack,
-        ackHeader.cid,
-        false, false, false
-    };
+    // Initialize parameters
+    int cwnd = MIN_CWND;
+    int ss_thresh = INIT_SS_THRESH;
+    int acked_bytes = 0;
+    int sent_bytes = 0;
     
-    while(fileSize > 0) {
-        // Assuming that cwnd is properly handled, and is no larger than the maximum size allowed.
-        int payloadSize = cwnd - 12;
-        char buffer[cwnd];
-        char * payloadBuffer = new char [payloadSize];
-        bzero(payloadBuffer, payloadSize);
+    while (sent_bytes < file_size) {
+
+        // Tracks how many packets are sent in this congestion window
+        int packets_sent = 0;
         
-        if (fread(payloadBuffer, 1, payloadSize, fd) < 0) {
-            std::cerr << "ERROR: Failed to read from file.";
-            close(sock);
-            fclose(fd);
-            exit(1);
+        // Congestion Window: send a total of cwnd bytes in several packets
+        while (cwnd > 0) {
+
+            // If have cwnd quota left but ran out of file, exit this loop and go to the ack loop
+            if (sent_bytes >= file_size) {
+                break;
+            }
+
+            // Expected payload size is either max UDP payload size or the remaining cwnd quota
+            int payload_size = min(MAX_PAYLOAD_SIZE, cwnd);
+            char buffer[MAX_PACKET_SIZE];
+            char * payloadBuffer = new char [payload_size];
+            bzero(payloadBuffer, payload_size);            
+
+            // actual_size might be smaller than the expected payload_size, since we may reach the EOF
+            int actual_size = fread(payloadBuffer, 1, payload_size, fd);
+            if (actual_size < 0) {
+                std::cerr << "ERROR: Failed to read from file.";
+                close(sock);
+                fclose(fd);
+                exit(1);
+            }
+
+            // Construct header
+            header_t payloadHeader {
+                ackHeader.seq + packets_sent * MAX_PAYLOAD_SIZE, // account for prior packets send in the same window
+                ackHeader.ack,
+                ackHeader.cid,
+                false, false, false
+            };
+
+            // Buffer will hold the entire packet (header + payload).
+            packet_size = formatSendPacket(buffer, payloadHeader, payloadBuffer, actual_size);
+            bytes_sent = sendto(sock, buffer, packet_size, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
+
+            sent_bytes += actual_size;
+            packets_sent += 1;
         }
-        
-        // Buffer will hold the entire packet (header + payload).
-        packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, payloadSize);
-        bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
-
-        fileSize -= payloadSize;
-
-        payloadHeader.seq += payloadSize;
     }
 
     fclose(fd);
