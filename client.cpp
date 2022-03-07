@@ -14,6 +14,8 @@
 #include <dirent.h>
 #include <netdb.h>
 #include <chrono>
+#include <thread>
+
 
 #include "protocol.hpp"
 
@@ -140,7 +142,7 @@ int main(int argc, const char * argv[]) {
     fseek(fd, 0, SEEK_SET);
     
     // Initialize cwnd;
-    int cwnd = 50000;
+    int cwnd = 512;
 
     header_t payloadHeader {
         ackHeader.seq,
@@ -151,6 +153,9 @@ int main(int argc, const char * argv[]) {
 
     size_t bytesRead = 1;
     
+    // Uncomment this to test server timeout
+    //std::this_thread::sleep_for(std::chrono::milliseconds(12000));
+
     while(bytesRead > 0) {
         // Assuming that cwnd is properly handled, and is no larger than the maximum size allowed.
         int payloadSize = cwnd - 12;
@@ -227,6 +232,7 @@ int main(int argc, const char * argv[]) {
         header_t finWaitHeader;
         
         if (recsize > 1) {
+            cout << "a" << endl;
             finWaitHeader = getHeader(buffer, recsize);
             
             if (finWaitHeader.f) {

@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <chrono>
 
 #include <unordered_map>
 
@@ -23,6 +24,7 @@ using namespace std;
 int sock;
 
 unordered_map<uint16_t, Connection> connections;
+unordered_map<uint16_t, std::chrono::steady_clock::time_point> lastPacketTimes;
 uint16_t connCnt = 1;
 
 void signalHandler(int sig) {
@@ -80,22 +82,46 @@ int main(int argc, const char * argv[]) {
         exit(1);
     }
     // Uncomment to make recvfrom nonblocking
-    /*
+    
     struct timeval read_timeout;
     read_timeout.tv_sec = 0;
     read_timeout.tv_usec = 10;
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout); */
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
 
     for (;;) {
         struct sockaddr sender;
         recsize = recvfrom(sock, (void*)buffer, sizeof buffer, 0, &sender, &fromlen);
         if (recsize < 0) {
-            perror("Negative receive size.");
-            exit(1);
+            // comment it out for non blocking.
+//            perror("Negative receive size.");
+//            exit(1);
+            continue;
         }
 
         auto header = getHeader(buffer, recsize);
         auto payload = getPayload(buffer, recsize);
+        
+        // Determine if the last packet was sent over 10 seconds ago. If so, change CState to ended and write ERROR to
+        // corresponding file.
+        if (lastPacketTimes.find(header.cid) != lastPacketTimes.end()) {
+            std::chrono::steady_clock::time_point current = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(current - lastPacketTimes[header.cid]).count() > 10000) {
+                connections[header.cid].state = CState::ENDED;
+                string payload {"ERROR"};
+                cout << "Connection timeout." << endl;
+                
+                if (fwrite(payload.c_str(), 1, payload.size(), connections[header.cid].file) < 0) {
+                    std::cerr << "Failed to write to file for a closed connection due to timeout." << endl;
+                }
+                                
+            } else {
+                // If no timeout, update the last packet received time.
+                lastPacketTimes[header.cid] = std::chrono::steady_clock::now();
+            }
+        } else {
+            // Create the entry if not present.
+            lastPacketTimes[header.cid] = std::chrono::steady_clock::now();
+        }
 
         if (header.s) {
             cout << "Received handshake request" << endl;
@@ -147,6 +173,18 @@ int main(int argc, const char * argv[]) {
         if (header.f) {
             cout << "Received Fin request" << endl;
             
+            // Only responds to a FIN when its sent by a valid, still open connection.
+            // If not, disregard it.
+            if (connections.find(header.cid) == connections.end()) {
+                cerr << "Invalid header cid, not found in connections" << endl;
+                continue;
+            }
+            
+            auto& conn = connections[header.cid];
+            if (conn.state == CState::ENDED) {
+                continue;
+            }
+            
             header_t ackHeader {
                 header.ack,
                 header.seq + 1,
@@ -182,11 +220,12 @@ int main(int argc, const char * argv[]) {
             if (conn.state == CState::STARTED) {
                 // Connection handshake is appropriate
                 
-                // Check if file ptr is nullptr, if so wait for ack first. 
+                // Check if file ptr is nullptr, if so wait for ack first.
                 if (conn.head == header.seq) {
                     conn.head += payload.size();
 
                     // If this packet is the next seq expected
+                    // FILE * f = fopen("a.txt", "a+");
                     cout << "Fptr here: " << conn.file << endl;
                    if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
                     // if (fwrite(payload.c_str(), 1, payload.size(), f) < 0) {
