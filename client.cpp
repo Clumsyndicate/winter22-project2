@@ -14,7 +14,6 @@
 #include <dirent.h>
 #include <netdb.h>
 #include <chrono>
-#include "chrono_io"
 
 #include "protocol.hpp"
 
@@ -169,9 +168,7 @@ int main(int argc, const char * argv[]) {
         fileSize -= payloadSize;
     }
 
-
-
-
+    fclose(fd);
     close(sock);
     return 0;
 }

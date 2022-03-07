@@ -97,7 +97,6 @@ int main(int argc, const char * argv[]) {
         auto header = getHeader(buffer, recsize);
         auto payload = getPayload(buffer, recsize);
 
-
         if (header.s) {
             cout << "Received handshake request" << endl;
             // After receiving a packet with SYN flag, the server should create state for the connection ID and proceed with 3-way handshake for this connection. Server should use 4321 as initial sequence number.
@@ -128,10 +127,76 @@ int main(int argc, const char * argv[]) {
                 continue;
             }
             connections[header.cid].state = CState::STARTED;
+            auto path = string(argv[2]) + "/" + to_string(header.cid) + ".file";
+            auto fptr = fopen(path.c_str(), "wb");
+            connections[header.cid].file = fptr;
+
+            continue;
+        }
+
+        if (header.f) {
+            cout << "Received Fin request" << endl;
+            // After receiving a packet with SYN flag, the server should create state for the connection ID and proceed with 3-way handshake for this connection. Server should use 4321 as initial sequence number.
+            header_t resHeader {
+                header.ack,
+                header.seq + 1,
+                header.cid,
+                true, false, false 
+            };
+
+            char sendBuffer[1024];
+            auto packetSize = formatSendPacket(sendBuffer, resHeader, nullptr, 0);
+
+            sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
+            
+            connCnt += 1;
+            continue;
         }
 
         if (connections.find(header.cid) != connections.end()) {
-            
+            // Received packet 
+            auto& conn = connections[header.cid];
+            if (conn.state == CState::STARTED) {
+                // Connection handshake is appropriate
+                
+                if (conn.head == header.seq) {
+                    conn.head += payload.size();
+                    // If this packet is the next seq expected
+                    if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
+                        perror("Write failed");
+                        // TODO : handle error
+                    }
+
+                } else {
+                    conn.queue[header.seq] = DataPacket { header.seq, payload.size(), payload };
+                }
+
+                // Check if out-of-order packets in the queue can now be written
+
+                for (auto& packet: conn.queue) {
+                    if (packet.first == conn.head) {
+                        if (fwrite(packet.second.payload.c_str(), 1, payload.size(), conn.file) < 0) {
+                            perror("Write failed");
+                            // TODO : handle error
+
+                        }
+                        conn.head += packet.second.size;
+                    }
+                }
+
+                // Send ACK
+                header_t resHeader {
+                    header.ack,
+                    header.seq + payload.size(),
+                    conn.cid,
+                    true, false, false 
+                };
+
+                char sendBuffer[1024];
+                auto packetSize = formatSendPacket(sendBuffer, resHeader, nullptr, 0);
+
+                sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
+            }
         } else {
             // Error connection id is not in connections.
         }
