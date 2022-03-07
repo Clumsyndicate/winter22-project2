@@ -138,6 +138,13 @@ int main(int argc, const char * argv[]) {
     
     // Initialize cwnd;
     int cwnd = 512;
+
+    header_t payloadHeader {
+        ackHeader.seq,
+        ackHeader.ack,
+        ackHeader.cid,
+        false, false, false
+    };
     
     while(fileSize > 0) {
         // Assuming that cwnd is properly handled, and is no larger than the maximum size allowed.
@@ -153,19 +160,13 @@ int main(int argc, const char * argv[]) {
             exit(1);
         }
         
-        // William, please update the header value.
-        header_t payloadHeader {
-            0,
-            0,
-            0,
-            false, false, false
-        };
-        
         // Buffer will hold the entire packet (header + payload).
         packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, payloadSize);
         bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
 
         fileSize -= payloadSize;
+
+        payloadHeader.seq += payloadSize;
     }
 
     fclose(fd);
