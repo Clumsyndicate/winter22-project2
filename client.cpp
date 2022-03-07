@@ -19,6 +19,11 @@
 
 using namespace std;
 
+// Abort connection after 10 seconds of silence from server. Closes socket.
+int abort_connection(int sock) {
+    close(sock);
+    exit(-1);
+}
 
 int main(int argc, const char * argv[]) {
     
@@ -27,6 +32,7 @@ int main(int argc, const char * argv[]) {
     int bytes_sent;
     char buffer[200];
     
+    ////////////////////////////////////////////////
     // Validate cml arguments.
     
     if (argc != 4) {
@@ -46,6 +52,7 @@ int main(int argc, const char * argv[]) {
         exit(1);
     }
 
+    ////////////////////////////////////////////////
     // validate hostname or IP address.
     
     struct addrinfo hints;
@@ -72,6 +79,7 @@ int main(int argc, const char * argv[]) {
 
     freeaddrinfo(res);
     
+    ////////////////////////////////////////////////
     // Initialize socket, send dummy data to server.
     
     // strcpy(buffer, "hello world!");
@@ -84,9 +92,10 @@ int main(int argc, const char * argv[]) {
     socketAddress.sin_addr.s_addr = inet_addr(host);
     socketAddress.sin_port = htons(portNumber);
 
+    ////////////////////////////////////////////////
     // Format buffer
-
-    // Send UDP packet src-ip=DEFAULT, src-port=DEFAULT, dst-ip=HOSTNAME-OR-IP, dst-port=PORT with SYN flag set, Connection ID initialized to 0, Sequence Number set to 12345, and Acknowledgement Number set to 0
+    // Send UDP packet src-ip=DEFAULT, src-port=DEFAULT, dst-ip=HOSTNAME-OR-IP, dst-port=PORT with SYN flag set,
+    // Connection ID initialized to 0, Sequence Number set to 12345, and Acknowledgement Number set to 0
 
     header_t header {
         12345,
@@ -103,7 +112,9 @@ int main(int argc, const char * argv[]) {
         exit(1);
     }
 
+    ////////////////////////////////////////////////
     // Listens for server response
+
     auto recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
 
     if (recsize < 0) {
@@ -116,7 +127,7 @@ int main(int argc, const char * argv[]) {
     header_t ackHeader {
         synHeader.ack,
         synHeader.seq + 1,
-        synHeader.cid,
+        synHeader.cid, // use server-assigned connection ID
         true, false, false
     };
 
