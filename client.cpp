@@ -132,6 +132,9 @@ int main(int argc, const char * argv[]) {
 
     auto synHeader = getHeader(buffer, recsize);
 
+    ////////////////////////////////////////////////
+    // Send Ack packet (no payload)
+
     header_t ackHeader {
         synHeader.ack,
         synHeader.seq + 1,
@@ -152,6 +155,9 @@ int main(int argc, const char * argv[]) {
         // if polling error or timeout
         abort_connection(sock);
     }
+
+    ////////////////////////////////////////////////
+    // Send payload with congestion control
     
     // Start the file transfer process. First open the file and get its size.
     FILE *fd = fopen(argv[3], "rb");
