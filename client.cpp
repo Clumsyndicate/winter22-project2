@@ -15,17 +15,12 @@
 #include <netdb.h>
 #include <chrono>
 #include <poll.h>
-#include <list>
+#include <unordered_map>
 
 #include "protocol.hpp"
 
 using namespace std;
 
-#pragma once
-struct packet_meta_t {
-    header_t header;
-    chrono::system_clock::time_point timestamp;
-};
 
 // Abort connection after 10 seconds of silence from server. Closes socket.
 int abort_connection(int sock) {
@@ -177,16 +172,26 @@ int main(int argc, const char * argv[]) {
     // Initialize parameters
     int cwnd = MIN_CWND;
     int ss_thresh = INIT_SS_THRESH;
-    int acked_bytes = 0;
     int sent_bytes = 0;
+    int sent_through_bytes = 0;   
+    bool retransmission_triggered = false;
+
+    // Set socket to be non-blocking for parallel packet timeout monitoring
+    struct timeval read_timeout;
+    read_timeout.tv_sec = 0;
+    read_timeout.tv_usec = 10;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
     
-    while (sent_bytes < file_size) {
+    while (sent_through_bytes < file_size) {
+
+        // Reset retransmission flag
+        retransmission_triggered = false;
 
         // Tracks how many packets are sent in this congestion window
         int packets_sent = 0;
 
         // Data structure for keeping track of timestamp
-        list<packet_meta_t> packet_meta_list;
+        unordered_map<int, chrono::system_clock::time_point> acknum_time_map;
         
         // Congestion Window: send a total of cwnd bytes in several packets
         while (cwnd > 0) {
@@ -197,14 +202,14 @@ int main(int argc, const char * argv[]) {
             }
 
             // Expected payload size is either max UDP payload size or the remaining cwnd quota
-            int payload_size = min(MAX_PAYLOAD_SIZE, cwnd);
+            int expected_payload_size = min(MAX_PAYLOAD_SIZE, cwnd);
             char buffer[MAX_PACKET_SIZE];
-            char * payloadBuffer = new char [payload_size];
-            bzero(payloadBuffer, payload_size);            
+            char * payloadBuffer = new char [expected_payload_size];
+            bzero(payloadBuffer, expected_payload_size);            
 
             // actual_size might be smaller than the expected payload_size, since we may reach the EOF
-            int actual_size = fread(payloadBuffer, 1, payload_size, fd);
-            if (actual_size < 0) {
+            int actual_payload_size = fread(payloadBuffer, 1, expected_payload_size, fd);
+            if (actual_payload_size < 0) {
                 std::cerr << "ERROR: Failed to read from file.";
                 close(sock);
                 fclose(fd);
@@ -220,32 +225,73 @@ int main(int argc, const char * argv[]) {
             };
 
             // Buffer will hold the entire packet (header + payload).
-            packet_size = formatSendPacket(buffer, payloadHeader, payloadBuffer, actual_size);
-            bytes_sent = sendto(sock, buffer, packet_size, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
+            packet_size = formatSendPacket(buffer, payloadHeader, payloadBuffer, actual_payload_size);
+            sendto(sock, buffer, packet_size, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
             
             // Record time in meta data struct
-            auto currTimestamp = chrono::system_clock::now();
-            packet_meta_t packet_meta {
-                payloadHeader,
-                currTimestamp
-            };
-            packet_meta_list.push_back(packet_meta);
+            int expected_acknum = payloadHeader.seq + actual_payload_size;
+            acknum_time_map[expected_acknum] = chrono::system_clock::now();
 
-            sent_bytes += actual_size;
+            sent_bytes += actual_payload_size;
             packets_sent += 1;
         }
 
-        // Listens for ack. For each expected ack, adjst parameter if received. Retransmit (and adjust parameter) if timeout through polling after 0.5 seconds
-        while (packets_sent > 0) {
-            auto recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
+        // Listens for ack. For each expected ack, adjst parameter if received.
+        // Retransmit (and adjust parameter) if timeout through polling after 0.5 seconds
+        // Keep iterating until the list of outstanding expected ack is gone
+        while (!acknum_time_map.empty()) {
 
-            if (recsize < 0) {
-                std::cerr << "Negative receive size.";
-                exit(1);
+            int received_size = 0;
+
+            // Check if any packet timeout, then check if received anything from socket
+            while (true) {
+                for (auto i : acknum_time_map) {
+                    if (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - i.second).count() >= RETRANSMISSION_TIMER) {
+                        // If detected timeout
+                        acknum_time_map.clear();
+                        sent_through_bytes = 0;
+                        ss_thresh = cwnd / 2;
+                        cwnd = MIN_CWND;
+                        retransmission_triggered = true;
+                        break;
+                    }
+                }
+
+                // Break out of loop if triggered retransmission
+                if (retransmission_triggered) {
+                    break;
+                }
+
+                // Check if received something
+                received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0); // TODO: problem, what if packets queue up
+                if (received_size < 0) {
+                    std::cerr << "Negative receive size.";
+                    exit(1);
+                } else if (received_size > 0) {
+                    // Received something
+                    break;
+                }
             }
 
-            auto synHeader = getHeader(buffer, recsize);
-            // TODO: Check ack number / seq number
+            if (retransmission_triggered) {
+                break;
+            }
+
+            auto ackHeader = getHeader(buffer, received_size);
+            int cum_ack = ackHeader.ack;
+
+            if (acknum_time_map.find(cum_ack) == acknum_time_map.end()) {
+                // ack num not expected
+                fclose(fd);
+                abort_connection(sock);
+            } else {
+                // pop all records with expected ack number through the cumulative ack
+                for (const auto &key_val : acknum_time_map) {
+                    if (key_val.first <= cum_ack) {
+                        acknum_time_map.erase(key_val.first);
+                    }
+                }
+            }
 
             // Adjust parameters for successful transmission of one packet
             if (cwnd < ss_thresh) {
@@ -254,9 +300,8 @@ int main(int argc, const char * argv[]) {
                 cwnd += MAX_PACKET_SIZE * MAX_PACKET_SIZE / cwnd;
             }
 
-            packets_sent -= 1;
-            acked_bytes += MAX_PAYLOAD_SIZE;
-        }  
+            sent_through_bytes += MAX_PAYLOAD_SIZE;
+        }
     }
 
     fclose(fd);
