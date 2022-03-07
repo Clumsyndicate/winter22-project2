@@ -310,95 +310,9 @@ int main(int argc, const char * argv[]) {
             sending_startpoint += actual_payload_size;
             cwnd_left -= actual_payload_size;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        //     // Listens for ack. For each expected ack, adjst parameter if received.
-        //     // Retransmit (and adjust parameter) if timeout through polling after 0.5 seconds
-        //     // Keep iterating until the list of outstanding expected ack is gone
-        //     while (!acknum_time_map.empty()) {
-
-        //         int received_size = 0;
-
-        //         // Check if any packet timeout, then check if received anything from socket
-        //         while (true) {
-        //             for (auto i : acknum_time_map) {
-        //                 if (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - i.second).count() >= RETRANSMISSION_TIMER) {
-        //                     // If detected timeout
-        //                     acknum_time_map.clear();
-        //                     sent_through_bytes = 0;
-        //                     ss_thresh = cwnd / 2;
-        //                     cwnd = MIN_CWND;
-        //                     retransmission_triggered = true;
-        //                     break;
-        //                 }
-        //             }
-
-        //             // Break out of loop if triggered retransmission
-        //             if (retransmission_triggered) {
-        //                 break;
-        //             }
-
-        //             // Check if received something
-        //             received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0); // TODO: problem, what if packets queue up
-        //             if (received_size < 0) {
-        //                 std::cerr << "Negative receive size.";
-        //                 exit(1);
-        //             } else if (received_size > 0) {
-        //                 // Received something
-        //                 break;
-        //             }
-        //         }
-
-        //         if (retransmission_triggered) {
-        //             break;
-        //         }
-
-        //         auto ackHeader = getHeader(buffer, received_size);
-        //         int cum_ack = ackHeader.ack;
-
-        //         if (acknum_time_map.find(cum_ack) == acknum_time_map.end()) {
-        //             // ack num not expected
-        //             fclose(fd);
-        //             abort_connection(sock);
-        //         } else {
-        //             // pop all records with expected ack number through the cumulative ack
-        //             for (const auto &key_val : acknum_time_map) {
-        //                 if (key_val.first <= cum_ack) {
-        //                     acknum_time_map.erase(key_val.first);
-        //                 }
-        //             }
-        //         }
-
-        //         // Adjust parameters for successful transmission of one packet
-        //         if (cwnd < ss_thresh) {
-        //             cwnd += MAX_PACKET_SIZE;
-        //         } else {
-        //             cwnd += MAX_PACKET_SIZE * MAX_PACKET_SIZE / cwnd;
-        //         }
-
-        //         // This value is to locate the point in the file to restart transmission if retransmission is triggered.
-        //         // Only the last packet could have a size that is not MAX_PAYLOAD_SIZE, 
-        //         sent_through_bytes += MAX_PAYLOAD_SIZE;
-        //     }
-        // }
-
-        fclose(fd);
-        close(sock);
-        return 0;
-        }
     }
+
+    fclose(fd);
+    close(sock);
+    return 0;
 }
