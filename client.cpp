@@ -15,10 +15,17 @@
 #include <netdb.h>
 #include <chrono>
 #include <poll.h>
+#include <list>
 
 #include "protocol.hpp"
 
 using namespace std;
+
+#pragma once
+struct packet_meta_t {
+    header_t header;
+    chrono::system_clock::time_point timestamp;
+};
 
 // Abort connection after 10 seconds of silence from server. Closes socket.
 int abort_connection(int sock) {
@@ -177,6 +184,9 @@ int main(int argc, const char * argv[]) {
 
         // Tracks how many packets are sent in this congestion window
         int packets_sent = 0;
+
+        // Data structure for keeping track of timestamp
+        list<packet_meta_t> packet_meta_list;
         
         // Congestion Window: send a total of cwnd bytes in several packets
         while (cwnd > 0) {
@@ -212,10 +222,41 @@ int main(int argc, const char * argv[]) {
             // Buffer will hold the entire packet (header + payload).
             packet_size = formatSendPacket(buffer, payloadHeader, payloadBuffer, actual_size);
             bytes_sent = sendto(sock, buffer, packet_size, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
+            
+            // Record time in meta data struct
+            auto currTimestamp = chrono::system_clock::now();
+            packet_meta_t packet_meta {
+                payloadHeader,
+                currTimestamp
+            };
+            packet_meta_list.push_back(packet_meta);
 
             sent_bytes += actual_size;
             packets_sent += 1;
         }
+
+        // Listens for ack. For each expected ack, adjst parameter if received. Retransmit (and adjust parameter) if timeout through polling after 0.5 seconds
+        while (packets_sent > 0) {
+            auto recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
+
+            if (recsize < 0) {
+                std::cerr << "Negative receive size.";
+                exit(1);
+            }
+
+            auto synHeader = getHeader(buffer, recsize);
+            // TODO: Check ack number / seq number
+
+            // Adjust parameters for successful transmission of one packet
+            if (cwnd < ss_thresh) {
+                cwnd += MAX_PACKET_SIZE;
+            } else {
+                cwnd += MAX_PACKET_SIZE * MAX_PACKET_SIZE / cwnd;
+            }
+
+            packets_sent -= 1;
+            acked_bytes += MAX_PAYLOAD_SIZE;
+        }  
     }
 
     fclose(fd);
