@@ -136,6 +136,7 @@ int main(int argc, const char * argv[]) {
     
     // Maximum file size 100MB. Using int is fine.
     int fileSize = ftell(fd);
+    cout << "File size is " << fileSize << endl;
     fseek(fd, 0, SEEK_SET);
     
     // Initialize cwnd;
@@ -154,22 +155,26 @@ int main(int argc, const char * argv[]) {
         char buffer[cwnd];
         char * payloadBuffer = new char [payloadSize];
         bzero(payloadBuffer, payloadSize);
-        
-        if (fread(payloadBuffer, 1, payloadSize, fd) < 0) {
+        size_t bytesRead;
+        if ((bytesRead = fread(payloadBuffer, 1, payloadSize, fd)) < 0) {
             std::cerr << "ERROR: Failed to read from file.";
             close(sock);
             fclose(fd);
             exit(1);
         }
+        // cout << "read " << bytesRead << " bytes from file" << endl;
         
         // Buffer will hold the entire packet (header + payload).
-        packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, payloadSize);
+        packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, bytesRead);
         bytes_sent = sendto(sock, buffer, packetSize, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
 
         fileSize -= payloadSize;
 
         payloadHeader.seq += payloadSize;
+        cout << "New seq " << payloadHeader.seq << endl;
     }
+
+    sleep(10000);
     
     // Payload sent, disconnect
     header_t finHeader {

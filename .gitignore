@@ -4,3 +4,6 @@
 server
 client
 .vscode
+save/
+test*
+.DS_Store

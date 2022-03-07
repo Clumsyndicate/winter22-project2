@@ -126,10 +126,19 @@ int main(int argc, const char * argv[]) {
                 cerr << "Invalid header cid, not found in connections" << endl;
                 continue;
             }
-            connections[header.cid].state = CState::STARTED;
-            auto path = string(argv[2]) + "/" + to_string(header.cid) + ".file";
-            auto fptr = fopen(path.c_str(), "wb");
-            connections[header.cid].file = fptr;
+            auto& conn = connections[header.cid];
+            if (conn.state == CState::ENDED) {
+                // Finish up the connection
+                fclose(conn.file);
+            }
+            if (conn.state == CState::ACK) {
+                conn.state = CState::STARTED;
+                auto path = string(argv[2]) + "/" + to_string(header.cid) + ".file";
+                cout << "Saving to path: " << path << endl;
+                auto fptr = fopen(path.c_str(), "wb");
+                conn.file = fptr;
+                cout << "Init fptr: " << fptr << endl;
+            }
 
             continue;
         }
@@ -173,16 +182,19 @@ int main(int argc, const char * argv[]) {
             if (conn.state == CState::STARTED) {
                 // Connection handshake is appropriate
                 
+                // Check if file ptr is nullptr, if so wait for ack first. 
                 if (conn.head == header.seq) {
                     conn.head += payload.size();
 
                     // If this packet is the next seq expected
-                    FILE * f = fopen("a.txt", "a+");
-//                    if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
-                    if (fwrite(payload.c_str(), 1, payload.size(), f) < 0) {
+                    // FILE * f = fopen("a.txt", "a+");
+                    cout << "Fptr here: " << conn.file << endl;
+                   if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
+                    // if (fwrite(payload.c_str(), 1, payload.size(), f) < 0) {
                         perror("Write failed");
                         // TODO : handle error
                     }
+                    fflush(conn.file);
                 } else {
                     conn.queue.emplace(header.seq, DataPacket { header.seq, (uint32_t) payload.size(), payload });
                 }
