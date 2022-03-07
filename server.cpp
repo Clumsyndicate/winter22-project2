@@ -168,7 +168,7 @@ int main(int argc, const char * argv[]) {
                     }
 
                 } else {
-                    conn.queue[header.seq] = DataPacket { header.seq, payload.size(), payload };
+                    conn.queue.emplace(header.seq, DataPacket { header.seq, (uint32_t) payload.size(), payload });
                 }
 
                 // Check if out-of-order packets in the queue can now be written
@@ -187,7 +187,7 @@ int main(int argc, const char * argv[]) {
                 // Send ACK
                 header_t resHeader {
                     header.ack,
-                    header.seq + payload.size(),
+                    header.seq + (uint32_t) payload.size(),
                     conn.cid,
                     true, false, false 
                 };
