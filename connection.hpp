@@ -38,6 +38,8 @@ struct Connection {
 
     FILE* file;
 
+    uint32_t wrap = 0;
+
     explicit Connection() {}
 
     explicit Connection(uint16_t id, sockaddr saddr):

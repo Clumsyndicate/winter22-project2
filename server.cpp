@@ -231,7 +231,10 @@ int main(int argc, const char * argv[]) {
                 // Check if file ptr is nullptr, if so wait for ack first.
                 if (conn.head == header.seq) {
                     conn.head += payload.size();
-
+                    if (conn.head > 102401) {
+                        conn.head = conn.head % 102401;
+                        conn.wrap++;
+                    }
                     // If this packet is the next seq expected
                     // cout << "Fptr here: " << conn.file << endl;
                     if (connections[header.cid].file == nullptr) {
@@ -256,6 +259,10 @@ int main(int argc, const char * argv[]) {
                         }
                         fflush(conn.file);
                         conn.head += packet.second.size;
+                        if (conn.head > 102401) {
+                            conn.head = conn.head % 102401;
+                            conn.wrap++;
+                        }
                     }
                 }
 
@@ -264,7 +271,7 @@ int main(int argc, const char * argv[]) {
 
                 // Send ACK
                 header_t resHeader {
-                    header.ack,
+                    4322,
                     // header.seq + (uint32_t) payload.size(),
                     conn.head,
                     conn.cid,
