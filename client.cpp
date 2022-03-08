@@ -187,7 +187,7 @@ int main(int argc, const char * argv[]) {
     uint32_t sending_startpoint = 0;        // the first byte that is not yet sent
     auto transmitted_startpoint = 0; // the first byte that is not successfully transmitted
 
-    const auto seq_startpoint = 0;
+    const auto seq_startpoint = 12345;
     uint32_t cum_ack = 0;
     uint32_t curr_received_seq = 0;
 
@@ -238,7 +238,7 @@ int main(int argc, const char * argv[]) {
             curr_received_seq = ackHeader.seq;
 
             // Update startpoint for successful transmission
-            transmitted_startpoint = cum_ack;
+            transmitted_startpoint = cum_ack - seq_startpoint;
 
             // Update packet metainfo map, remove successfully transmitted ones
             
@@ -310,7 +310,6 @@ int main(int argc, const char * argv[]) {
             cout << payloadHeader.a << '\n';
             cout << payloadHeader.s << '\n';
             cout << payloadHeader.f << '\n';
-            cout << "what the fuck" << '\n';
             cout << actual_payload_size << '\n';
             cout << "=================\n";
 
