@@ -117,6 +117,7 @@ int main(int argc, const char * argv[]) {
         perror("Sending to server failed.");
         exit(1);
     }
+    logClientSend(header, MIN_CWND, INIT_SS_THRESH, false);
 
     // Timeout after 10 seconds of inactivity from server
     struct pollfd pfd = {.fd = sock, .events = POLLIN};
@@ -158,6 +159,7 @@ int main(int argc, const char * argv[]) {
         perror("Sending to server failed.");
         exit(1);
     }
+    logClientSend(ackHeader, MIN_CWND, INIT_SS_THRESH, false);
 
     cout << "e" << endl;
 
@@ -188,9 +190,9 @@ int main(int argc, const char * argv[]) {
     uint32_t sending_startpoint = 0;        // the first byte that is not yet sent
     auto transmitted_startpoint = 0; // the first byte that is not successfully transmitted
 
-    const auto seq_startpoint = 0;
-    uint32_t cum_ack = 0;
-    uint32_t curr_received_seq = 0;
+    const auto seq_startpoint = ackHeader.seq;
+    uint32_t cum_ack = ackHeader.ack;
+    uint32_t curr_received_seq = ackHeader.ack;
 
     cout << "h" << endl;
 
@@ -307,7 +309,8 @@ int main(int argc, const char * argv[]) {
             // Buffer will hold the entire packet (header + payload).
             packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, actual_payload_size);
             sendto(sock, buffer, packetSize, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
-            
+            logClientSend(payloadHeader, cwnd, ss_thresh, false);
+ 
             // Construct meta struct
             meta_t meta {
                 payloadHeader.seq,
@@ -334,6 +337,7 @@ int main(int argc, const char * argv[]) {
     // Don't include anything in the payload
     packetSize = formatSendPacket(buffer, finHeader, nullptr, 0);
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+    logClientSend(finHeader, cwnd, ss_thresh, false);
     
     cout << "Sent fin packet" << endl;
     
@@ -388,6 +392,7 @@ int main(int argc, const char * argv[]) {
                     close(sock);
                     exit(1);
                 }
+                logClientSend(ackFinAckHeader, cwnd, ss_thresh, false);
             }
         }
         // Only responds to a FIN packet

@@ -246,12 +246,13 @@ int main(int argc, const char * argv[]) {
                 // Check if out-of-order packets in the queue can now be written
                 for (auto& packet: conn.queue) {
                     if (packet.first == conn.head) {
-                        if (connections[header.cid].file == nullptr) {
+                        if (conn.file == nullptr) {
                             std::cerr << "File ptr is nullptr when trying to process cid=" << conn.cid << " packet queue!" << endl;
                         } else if (fwrite(packet.second.payload.c_str(), 1, payload.size(), conn.file) < 0) {
                             perror("Write failed");
                             // TODO : handle error
                         }
+                        fflush(conn.file);
                         conn.head += packet.second.size;
                     }
                 }
@@ -262,7 +263,8 @@ int main(int argc, const char * argv[]) {
                 // Send ACK
                 header_t resHeader {
                     header.ack,
-                    header.seq + (uint32_t) payload.size(),
+                    // header.seq + (uint32_t) payload.size(),
+                    conn.head,
                     conn.cid,
                     true, false, false
                 };
