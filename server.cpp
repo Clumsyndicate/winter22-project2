@@ -99,6 +99,17 @@ int main(int argc, const char * argv[]) {
         }
 
         auto header = getHeader(buffer, recsize);
+        if ((header.cid != 0 && connections.find(header.cid) == connections.end()) || (header.cid != 0 && connections[header.cid].state == CState::ENDED)) {
+            cout << "DROP " << header.seq << " " << header.ack << " " << header.cid;
+            if (header.a) 
+                cout << " ACK";
+            if (header.s)
+                cout << " SYN";
+            if (header.f)
+                cout << " FIN";
+            cout << endl; 
+            continue;
+        }
         logServerRecv(header);
         auto payload = getPayload(buffer, recsize);
         
@@ -117,6 +128,7 @@ int main(int argc, const char * argv[]) {
                 else if (fwrite(payload.c_str(), 1, payload.size(), connections[header.cid].file) < 0) {
                     std::cerr << "Failed to write to file for a closed connection due to timeout." << endl;
                 }
+                fflush(connections[header.cid].file);
                                 
             } else {
                 // If no timeout, update the last packet received time.
@@ -278,17 +290,7 @@ int main(int argc, const char * argv[]) {
 
                 
             }
-        } else {
-            // Error connection id is not in connections.
-            cout << "DROP " << header.seq << " " << header.ack << " " << header.cid;
-            if (header.a) 
-                cout << " ACK";
-            if (header.s)
-                cout << " SYN";
-            if (header.f)
-                cout << " FIN";
-            cout << endl;
-        }
+        } 
     }
     
     return 0;

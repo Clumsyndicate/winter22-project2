@@ -16,6 +16,7 @@
 #include <chrono>
 #include <poll.h>
 #include <map>
+#include <thread>
 
 #include "protocol.hpp"
 
@@ -206,6 +207,7 @@ int main(int argc, const char * argv[]) {
     // Send payload with congestion control
     
     cout << "a" << endl;;
+    // std::this_thread::sleep_for(std::chrono::milliseconds(12000));
 
     while (transmitted_startpoint < file_size) {
 
@@ -220,6 +222,9 @@ int main(int argc, const char * argv[]) {
                 ss_thresh = cwnd / 2;
                 cwnd = MIN_CWND;
                 retransmission_triggered = true;
+
+                cout << "Retransmitting from " << sending_startpoint << " ack: " << i->first << " seq: " << i->second.seq << endl;
+
                 acknum_map.clear();
                 break;
             }
@@ -234,10 +239,14 @@ int main(int argc, const char * argv[]) {
         // Check arrival in socket
         auto received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
 
+
         // If received something, start processing ack packet to determine new starting point
         if (received_size > 0) {
             ackHeader = getHeader(buffer, received_size);
+            logClientRecv(ackHeader, cwnd, ss_thresh);
             cum_ack = ackHeader.ack;
+
+            // cout << "cum_ack: " << cum_ack << endl;
             curr_received_seq = ackHeader.seq;
 
             // Update startpoint for successful transmission
@@ -254,7 +263,9 @@ int main(int argc, const char * argv[]) {
             }
             
             for (uint32_t key : indices) {
+                // cout << "Erasing " << key << endl;
                 acknum_map.erase(key);
+                // exit(1);
             }
 
             // Adjust parameters for successful transmission of one packet
@@ -306,16 +317,6 @@ int main(int argc, const char * argv[]) {
                 false, false, false
             };
 
-            cout << "=================\n";
-            cout << payloadHeader.seq << '\n';
-            cout << payloadHeader.ack << '\n';
-            cout << payloadHeader.cid << '\n';
-            cout << payloadHeader.a << '\n';
-            cout << payloadHeader.s << '\n';
-            cout << payloadHeader.f << '\n';
-            cout << actual_payload_size << '\n';
-            cout << "=================\n";
-
             // Buffer will hold the entire packet (header + payload).
             packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, actual_payload_size);
             sendto(sock, buffer, packetSize, 0, (struct sockaddr*)&socketAddress, sizeof socketAddress);
@@ -349,7 +350,7 @@ int main(int argc, const char * argv[]) {
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     logClientSend(finHeader, cwnd, ss_thresh, false);
     
-    cout << "Sent fin packet" << endl;
+    // cout << "Sent fin packet" << endl;
     
     if (bytes_sent < 0) {
         std::cerr << "Failed to send FIN packet." << endl;
