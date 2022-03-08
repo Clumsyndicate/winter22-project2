@@ -140,7 +140,7 @@ int main(int argc, const char * argv[]) {
         }
 
         if (header.s) {
-            cout << "Received handshake request" << endl;
+            // cout << "Received handshake request" << endl;
             // After receiving a packet with SYN flag, the server should create state for the connection ID and proceed with 3-way handshake for this connection. Server should use 4321 as initial sequence number.
             header_t resHeader {
                 4321,
@@ -173,13 +173,13 @@ int main(int argc, const char * argv[]) {
             if (conn.state == CState::ENDED) {
                 // Finish up the connection
                 fclose(conn.file);
-                cout << "Connection closed." << endl;
+                // cout << "Connection closed." << endl;
                 continue;
             }
             if (conn.state == CState::ACK) {
                 conn.state = CState::STARTED;
                 auto path = string(argv[2]) + "/" + to_string(header.cid) + ".file";
-                cout << "Saving to path: " << path << endl;
+                // cout << "Saving to path: " << path << endl;
                 auto fptr = fopen(path.c_str(), "wb");
                 conn.file = fptr;
                 // cout << "Init fptr: " << fptr << endl;
@@ -189,7 +189,7 @@ int main(int argc, const char * argv[]) {
 
         // After receiving a FIN, send an ACK and FIN back to back (but not closing the socket).
         if (header.f) {
-            cout << "Received Fin request" << endl;
+            // cout << "Received Fin request" << endl;
             
             // Only responds to a FIN when its sent by a valid, still open connection.
             // If not, disregard it.
@@ -207,7 +207,7 @@ int main(int argc, const char * argv[]) {
                 4322,
                 header.seq + 1,
                 header.cid,
-                true, false, false
+                true, false, true
             };
 
             char sendBuffer[1024];
@@ -215,16 +215,6 @@ int main(int argc, const char * argv[]) {
             sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
             logServerSend(ackHeader);
 
-            header_t finHeader {
-                4322,
-                0,
-                header.cid,
-                false, false, true
-            };
-            
-            packetSize = formatSendPacket(sendBuffer, finHeader, nullptr, 0);
-            sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
-            logServerSend(finHeader);
             // Now change the status of this connection to ended.
             connections[header.cid].state = CState::ENDED;
             
@@ -269,8 +259,8 @@ int main(int argc, const char * argv[]) {
                     }
                 }
 
-                cout << "Queue size: " << conn.queue.size() << endl;
-                cout << conn.head << " " << conn.queue.begin()->first << endl;
+                // cout << "Queue size: " << conn.queue.size() << endl;
+                // cout << conn.head << " " << conn.queue.begin()->first << endl;
 
                 // Send ACK
                 header_t resHeader {
