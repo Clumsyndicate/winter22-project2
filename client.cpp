@@ -239,7 +239,6 @@ int main(int argc, const char * argv[]) {
         // Check arrival in socket
         auto received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
 
-
         // If received something, start processing ack packet to determine new starting point
         if (received_size > 0) {
             ackHeader = getHeader(buffer, received_size);

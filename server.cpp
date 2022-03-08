@@ -99,7 +99,7 @@ int main(int argc, const char * argv[]) {
         }
 
         auto header = getHeader(buffer, recsize);
-        if ((header.cid != 0 && connections.find(header.cid) == connections.end()) || (header.cid != 0 && connections[header.cid].state == CState::ENDED)) {
+        if ((header.cid != 0 && connections.find(header.cid) == connections.end()) || (header.cid != 0 && !header.a && connections[header.cid].state == CState::ENDED)) {
             cout << "DROP " << header.seq << " " << header.ack << " " << header.cid;
             if (header.a) 
                 cout << " ACK";
@@ -163,7 +163,7 @@ int main(int argc, const char * argv[]) {
 
         if (header.a) {
             // Client ack
-            cout << "Received client " << header.cid << " ack" << endl;
+            // cout << "Received client " << header.cid << " ack" << endl;
             if (connections.find(header.cid) == connections.end()) {
                 // Invalid header cid, not found in connections
                 cerr << "Invalid header cid, not found in connections" << endl;
@@ -173,6 +173,8 @@ int main(int argc, const char * argv[]) {
             if (conn.state == CState::ENDED) {
                 // Finish up the connection
                 fclose(conn.file);
+                cout << "Connection closed." << endl;
+                continue;
             }
             if (conn.state == CState::ACK) {
                 conn.state = CState::STARTED;
@@ -183,7 +185,6 @@ int main(int argc, const char * argv[]) {
                 // cout << "Init fptr: " << fptr << endl;
             }
 
-            continue;
         }
 
         // After receiving a FIN, send an ACK and FIN back to back (but not closing the socket).
@@ -203,7 +204,7 @@ int main(int argc, const char * argv[]) {
             }
             
             header_t ackHeader {
-                header.ack,
+                4322,
                 header.seq + 1,
                 header.cid,
                 true, false, false
@@ -215,7 +216,7 @@ int main(int argc, const char * argv[]) {
             logServerSend(ackHeader);
 
             header_t finHeader {
-                header.ack + 1,
+                4322,
                 0,
                 header.cid,
                 false, false, true
@@ -226,7 +227,6 @@ int main(int argc, const char * argv[]) {
             logServerSend(finHeader);
             // Now change the status of this connection to ended.
             connections[header.cid].state = CState::ENDED;
-            cout << "Connection closed." << endl;
             
             continue;
         }
