@@ -5,6 +5,7 @@ USERID=123456789
 CLASSES=
 
 all: server client
+	mkdir save
 
 server: $(CLASSES)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $@.cpp
@@ -13,6 +14,7 @@ client: $(CLASSES)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $@.cpp
 
 clean:
+	rm -rf save
 	rm -rf *.o *~ *.gch *.swp *.dSYM server client *.tar.gz
 
 dist: tarball

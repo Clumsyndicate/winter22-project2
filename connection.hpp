@@ -45,5 +45,6 @@ struct Connection {
         cid(id),
         sender(saddr),
         head(12346),
-        file(nullptr) {}
+        file(nullptr) {
+        }
 };

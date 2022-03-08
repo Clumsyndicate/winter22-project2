@@ -27,18 +27,64 @@ header_t getHeader(char* buf, ssize_t size) {
         (bool) (flags & MASK_F),
     };
     // debug
-    cout << "Recv'd packet" << endl;
-    cout << "Size: " << size << ", Seq: " << h.seq << ", Ack: " << h.ack << ", Cid: " << h.cid << endl;
-    cout << "A: " << h.a << " S: " << h.s << " F: " << h.f << endl;
+    // cout << "Recv'd packet" << endl;
+    // cout << "Size: " << size << ", Seq: " << h.seq << ", Ack: " << h.ack << ", Cid: " << h.cid << endl;
+    // cout << "A: " << h.a << " S: " << h.s << " F: " << h.f << endl;
     return h;
+}
+
+void logServerRecv(header_t h) {
+    cout << "RECV " << h.seq << " " << h.ack << " " << h.cid;
+    if (h.a) 
+        cout << " ACK";
+    if (h.s)
+        cout << " SYN";
+    if (h.f)
+        cout << " FIN";
+    cout << endl;
+}
+
+void logServerSend(header_t h) {
+    cout << "SEND " << h.seq << " " << h.ack << " " << h.cid;
+    if (h.a) 
+        cout << " ACK";
+    if (h.s)
+        cout << " SYN";
+    if (h.f)
+        cout << " FIN";
+    cout << endl;
+}
+
+void logClientRecv(header_t h, long cwnd, long ssthresh) {
+    cout << "RECV " << h.seq << " " << h.ack << " " << h.cid << " " << cwnd << " " << ssthresh;
+    if (h.a) 
+        cout << " ACK";
+    if (h.s)
+        cout << " SYN";
+    if (h.f)
+        cout << " FIN";
+    cout << endl;
+}
+
+void logClientSend(header_t h, long cwnd, long ssthresh, bool dup) {
+    cout << "SEND " << h.seq << " " << h.ack << " " << h.cid << " " << cwnd << " " << ssthresh;
+    if (h.a) 
+        cout << " ACK";
+    if (h.s)
+        cout << " SYN";
+    if (h.f)
+        cout << " FIN";
+    if (dup)
+        cout << " DUP";
+    cout << endl;
 }
 
 string getPayload(char* buf, ssize_t size) {
     string payload {buf+12, (size_t) size-12};
-    if (size > 0) {
-        cout << "Payload: " << endl;
-        cout << payload << endl << endl;
-    }
+    // if (size > 12) {
+    //     cout << "Payload: " << endl;
+    //     cout << payload << endl << endl;
+    // }
     return payload;
 }
 

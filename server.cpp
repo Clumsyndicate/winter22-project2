@@ -99,6 +99,7 @@ int main(int argc, const char * argv[]) {
         }
 
         auto header = getHeader(buffer, recsize);
+        logServerRecv(header);
         auto payload = getPayload(buffer, recsize);
         
         // Determine if the last packet was sent over 10 seconds ago. If so, change CState to ended and write ERROR to
@@ -110,7 +111,10 @@ int main(int argc, const char * argv[]) {
                 string payload {"ERROR"};
                 cout << "Connection timeout." << endl;
                 
-                if (fwrite(payload.c_str(), 1, payload.size(), connections[header.cid].file) < 0) {
+                if (connections[header.cid].file == nullptr) {
+                    std::cerr << "File ptr is null when trying to write ERROR from time out!" << endl;
+                }
+                else if (fwrite(payload.c_str(), 1, payload.size(), connections[header.cid].file) < 0) {
                     std::cerr << "Failed to write to file for a closed connection due to timeout." << endl;
                 }
                                 
@@ -139,6 +143,7 @@ int main(int argc, const char * argv[]) {
             auto packetSize = formatSendPacket(sendBuffer, resHeader, nullptr, 0);
 
             sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
+            logServerSend(resHeader);
             
             connCnt += 1;
             continue;
@@ -163,7 +168,7 @@ int main(int argc, const char * argv[]) {
                 cout << "Saving to path: " << path << endl;
                 auto fptr = fopen(path.c_str(), "wb");
                 conn.file = fptr;
-                cout << "Init fptr: " << fptr << endl;
+                // cout << "Init fptr: " << fptr << endl;
             }
 
             continue;
@@ -195,7 +200,8 @@ int main(int argc, const char * argv[]) {
             char sendBuffer[1024];
             auto packetSize = formatSendPacket(sendBuffer, ackHeader, nullptr, 0);
             sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
-            
+            logServerSend(ackHeader);
+
             header_t finHeader {
                 header.ack + 1,
                 0,
@@ -205,7 +211,7 @@ int main(int argc, const char * argv[]) {
             
             packetSize = formatSendPacket(sendBuffer, finHeader, nullptr, 0);
             sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
-            
+            logServerSend(finHeader);
             // Now change the status of this connection to ended.
             connections[header.cid].state = CState::ENDED;
             cout << "Connection closed." << endl;
@@ -225,10 +231,10 @@ int main(int argc, const char * argv[]) {
                     conn.head += payload.size();
 
                     // If this packet is the next seq expected
-                    // FILE * f = fopen("a.txt", "a+");
-                    cout << "Fptr here: " << conn.file << endl;
-                   if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
-                    // if (fwrite(payload.c_str(), 1, payload.size(), f) < 0) {
+                    // cout << "Fptr here: " << conn.file << endl;
+                    if (connections[header.cid].file == nullptr) {
+                        std::cerr << "File ptr is nullptr when trying to write to file cid=" << conn.cid << " packet queue!" << endl;
+                    } else if (fwrite(payload.c_str(), 1, payload.size(), conn.file) < 0) {
                         perror("Write failed");
                         // TODO : handle error
                     }
@@ -240,13 +246,18 @@ int main(int argc, const char * argv[]) {
                 // Check if out-of-order packets in the queue can now be written
                 for (auto& packet: conn.queue) {
                     if (packet.first == conn.head) {
-                        if (fwrite(packet.second.payload.c_str(), 1, payload.size(), conn.file) < 0) {
+                        if (connections[header.cid].file == nullptr) {
+                            std::cerr << "File ptr is nullptr when trying to process cid=" << conn.cid << " packet queue!" << endl;
+                        } else if (fwrite(packet.second.payload.c_str(), 1, payload.size(), conn.file) < 0) {
                             perror("Write failed");
                             // TODO : handle error
                         }
                         conn.head += packet.second.size;
                     }
                 }
+
+                cout << "Queue size: " << conn.queue.size() << endl;
+                cout << conn.head << " " << conn.queue.begin()->first << endl;
 
                 // Send ACK
                 header_t resHeader {
@@ -260,9 +271,21 @@ int main(int argc, const char * argv[]) {
                 auto packetSize = formatSendPacket(sendBuffer, resHeader, nullptr, 0);
 
                 sendto(sock, sendBuffer, packetSize, 0, &sender, sizeof sender);
+                logServerSend(resHeader);
+            } else if (conn.state == CState::ENDED) {
+
+                
             }
         } else {
             // Error connection id is not in connections.
+            cout << "DROP " << header.seq << " " << header.ack << " " << header.cid;
+            if (header.a) 
+                cout << " ACK";
+            if (header.s)
+                cout << " SYN";
+            if (header.f)
+                cout << " FIN";
+            cout << endl;
         }
     }
     

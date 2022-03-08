@@ -99,7 +99,6 @@ int main(int argc, const char * argv[]) {
 
     
     auto packetSize = formatSendPacket(buffer, header, nullptr, 0);
-    cout << "Final packet size: " << packetSize << endl;
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     if (bytes_sent < 0) {
         perror("Sending to server failed.");
@@ -116,6 +115,7 @@ int main(int argc, const char * argv[]) {
 
     auto synHeader = getHeader(buffer, recsize);
     cid = synHeader.cid;
+    logClientRecv(synHeader, 0, 0);
     
     header_t ackHeader {
         synHeader.ack,
@@ -178,6 +178,7 @@ int main(int argc, const char * argv[]) {
 
         payloadHeader.seq += payloadSize;
         cout << "New seq " << payloadHeader.seq << endl;
+        usleep(1000);
     }
     
     struct timeval read_timeout;
@@ -214,6 +215,7 @@ int main(int argc, const char * argv[]) {
     header_t finAckHeader;
     if (recsize > 0) {
         finAckHeader = getHeader(buffer, recsize);
+        logClientRecv(finAckHeader, 0, 0);
     }
     
     
@@ -232,9 +234,9 @@ int main(int argc, const char * argv[]) {
         header_t finWaitHeader;
         
         if (recsize > 1) {
-            cout << "a" << endl;
             finWaitHeader = getHeader(buffer, recsize);
-            
+            logClientRecv(finWaitHeader, 0, 0);
+
             if (finWaitHeader.f) {
                 // Weird name but meh
                 header_t ackFinAckHeader {
