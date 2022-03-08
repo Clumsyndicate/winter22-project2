@@ -145,24 +145,20 @@ int main(int argc, const char * argv[]) {
     ////////////////////////////////////////////////
     // Send Ack packet (no payload)
     
-    cout << "d" << endl;
+    // header_t ackHeader {
+    //     synHeader.ack,
+    //     synHeader.seq + 1,
+    //     my_cid,
+    //     true, false, false
+    // };
 
-    header_t ackHeader {
-        synHeader.ack,
-        synHeader.seq + 1,
-        my_cid,
-        true, false, false
-    };
-
-    packetSize = formatSendPacket(buffer, ackHeader, nullptr, 0);
-    bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
-    if (bytes_sent < 0) {
-        perror("Sending to server failed.");
-        exit(1);
-    }
-    logClientSend(ackHeader, MIN_CWND, INIT_SS_THRESH, false);
-
-    cout << "e" << endl;
+    // packetSize = formatSendPacket(buffer, ackHeader, nullptr, 0);
+    // bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+    // if (bytes_sent < 0) {
+    //     perror("Sending to server failed.");
+    //     exit(1);
+    // }
+    // logClientSend(ackHeader, MIN_CWND, INIT_SS_THRESH, false);
 
     ////////////////////////////////////////////////
     // Set up congestion control
@@ -171,8 +167,6 @@ int main(int argc, const char * argv[]) {
     FILE *fd = fopen(argv[3], "rb");
     fseek(fd, 0, SEEK_END);
     
-    cout << "f" << endl;
-
     // Maximum file size 100MB. Using int is fine.
     auto file_size = ftell(fd);
     fseek(fd, 0, SEEK_SET);
@@ -183,21 +177,18 @@ int main(int argc, const char * argv[]) {
     read_timeout.tv_usec = 10;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
 
-    cout << "g" << endl;
-
     // Initialize parameters
     auto cwnd = MIN_CWND;
     auto ss_thresh = INIT_SS_THRESH;
     uint32_t sending_startpoint = 0;        // the first byte that is not yet sent
     auto transmitted_startpoint = 0; // the first byte that is not successfully transmitted
 
-    const auto seq_startpoint = ackHeader.seq;
-    uint32_t cum_ack = ackHeader.ack;
-    uint32_t curr_received_seq = ackHeader.ack;
-
-    cout << "h" << endl;
+    const auto seq_startpoint = synHeader.ack;
+    uint32_t cum_ack = synHeader.seq + 1;
+    uint32_t curr_received_seq = synHeader.seq + 1;
 
     bool retransmission_triggered = false;
+    bool firstDataPacket = true;
 
     // Data structure for keeping track of timestamp
     // expected_acknum -> (seqnum, timestamp)
@@ -206,7 +197,6 @@ int main(int argc, const char * argv[]) {
     ////////////////////////////////////////////////
     // Send payload with congestion control
     
-    cout << "a" << endl;;
     // std::this_thread::sleep_for(std::chrono::milliseconds(12000));
 
     while (transmitted_startpoint < file_size) {
@@ -232,16 +222,15 @@ int main(int argc, const char * argv[]) {
 
         // Start new loop if triggered retransmission
         if (retransmission_triggered) {
-            cout << "c" << endl;
             continue;
         }
 
         // Check arrival in socket
-        auto received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
-
         // If received something, start processing ack packet to determine new starting point
-        if (received_size > 0) {
-            ackHeader = getHeader(buffer, received_size);
+        ssize_t received_size;
+        
+        while ((received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0)) > 0) {
+            auto ackHeader = getHeader(buffer, received_size);
             logClientRecv(ackHeader, cwnd, ss_thresh);
             cum_ack = ackHeader.ack;
 
@@ -315,6 +304,11 @@ int main(int argc, const char * argv[]) {
                 my_cid,
                 false, false, false
             };
+
+            if (firstDataPacket) {
+                firstDataPacket = false;
+                payloadHeader.a = true;
+            }
 
             // Buffer will hold the entire packet (header + payload).
             packetSize = formatSendPacket(buffer, payloadHeader, payloadBuffer, actual_payload_size);
