@@ -256,9 +256,9 @@ int main(int argc, const char * argv[]) {
 
             // Adjust parameters for successful transmission of one packet
             if (cwnd < ss_thresh) {
-                cwnd += MAX_PACKET_SIZE;
+                cwnd += MAX_PAYLOAD_SIZE;
             } else {
-                cwnd += MAX_PACKET_SIZE * MAX_PACKET_SIZE / cwnd;
+                cwnd += MAX_PAYLOAD_SIZE * MAX_PAYLOAD_SIZE / cwnd;
             }
 
             continue;   //TODO: not sure if we should continue or just let it flow to the sending loop
@@ -302,6 +302,17 @@ int main(int argc, const char * argv[]) {
                 my_cid,
                 false, false, false
             };
+
+            cout << "=================\n";
+            cout << payloadHeader.seq << '\n';
+            cout << payloadHeader.ack << '\n';
+            cout << payloadHeader.cid << '\n';
+            cout << payloadHeader.a << '\n';
+            cout << payloadHeader.s << '\n';
+            cout << payloadHeader.f << '\n';
+            cout << "what the fuck" << '\n';
+            cout << actual_payload_size << '\n';
+            cout << "=================\n";
 
             // Buffer will hold the entire packet (header + payload).
             packet_size = formatSendPacket(buffer, payloadHeader, payloadBuffer, actual_payload_size);
