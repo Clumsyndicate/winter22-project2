@@ -101,9 +101,6 @@ int main(int argc, const char * argv[]) {
     ////////////////////////////////////////////////
     // Initialize socket, send dummy data to server.
     
-    // strcpy(buffer, "hello world!");
-//    string payload { "hello world!" };
-    
     memset(&socketAddress, 0, sizeof socketAddress);
 
     socketAddress.sin_family = AF_INET;
@@ -122,7 +119,6 @@ int main(int argc, const char * argv[]) {
         false, true, false
     };
 
-    
     auto packetSize = formatSendPacket(buffer, header, nullptr, 0);
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     if (bytes_sent < 0) {
@@ -154,24 +150,6 @@ int main(int argc, const char * argv[]) {
     auto my_cid = synHeader.cid; // use server-assigned connection ID
 
     ////////////////////////////////////////////////
-    // Send Ack packet (no payload)
-    
-    // header_t ackHeader {
-    //     synHeader.ack,
-    //     synHeader.seq + 1,
-    //     my_cid,
-    //     true, false, false
-    // };
-
-    // packetSize = formatSendPacket(buffer, ackHeader, nullptr, 0);
-    // bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
-    // if (bytes_sent < 0) {
-    //     perror("Sending to server failed.");
-    //     exit(1);
-    // }
-    // logClientSend(ackHeader, MIN_CWND, INIT_SS_THRESH, false);
-
-    ////////////////////////////////////////////////
     // Set up congestion control
     
     // Start the file transfer process. First open the file and get its size.
@@ -179,7 +157,7 @@ int main(int argc, const char * argv[]) {
     fseek(fd, 0, SEEK_END);
     
     // Maximum file size 100MB. Using int is fine.
-    int file_size = ftell(fd);
+    uint32_t file_size = ftell(fd);
     fseek(fd, 0, SEEK_SET);
 
     // Set socket to be non-blocking for parallel packet timeout monitoring
@@ -224,9 +202,8 @@ int main(int argc, const char * argv[]) {
                 abort_connection(sock);
             }
         }
-        
         ////////////////////////////////////////////////
-        // Sending logic
+        // Sending Packets with CWND
 
         // Reposition the file descriptor to be at the start of data to be sent
         fseek(fd, sent_bytes, SEEK_SET);        //TODO: not optimal, moving fd every time
@@ -234,7 +211,7 @@ int main(int argc, const char * argv[]) {
         // Congestion window: send a total of cwnd bytes in several packets
         while (transmitted_bytes + cwnd > sent_bytes) {
             // If have cwnd quota left but ran out of file, exit this sending loop
-            if (sent_bytes >= (uint32_t) file_size) {
+            if (sent_bytes >= file_size) {
                 break;
             }
 
@@ -258,12 +235,6 @@ int main(int argc, const char * argv[]) {
                 fclose(fd);
                 abort_connection(sock);
             }
-
-            // outbound_seq = seq_startpoint + sent_bytes;
-            // if (outbound_seq > MAX_SEQ_NUM) {
-            //     outbound_wraparound_times += 1;
-            //     outbound_seq = outbound_seq % MAX_SEQ_NUM;
-            // }
 
             // Construct header
             header_t payloadHeader {
@@ -311,22 +282,23 @@ int main(int argc, const char * argv[]) {
         // myfile << sent_bytes << " sent \n";
         // myfile << " ---------- \n";
 
-        // Reset retransmission flag
-        // retransmission_triggered = false;
+        ////////////////////////////////////////////////
+        // Check Timeout
 
-        // Check timeout
         auto it = packet_info.begin();
         while (it != packet_info.end())
         {
             auto time_elapsed = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - it->time).count();
             
+            //cout << time_elapsed << " time elapsed\n";
+
             if (time_elapsed > RETRANSMISSION_TIMER) {
                 // If detected timeout
                 sent_bytes = it->offset;
                 ss_thresh = cwnd / 2;
                 cwnd = MIN_CWND;
                 // retransmission_triggered = true;
-                cout << "Retransmitting from \n"; //<< sent_bytes << " ack: " << it->first << " seq: " << i->second.seq << endl;
+                cout << "Retransmitting from \n" << sent_bytes << " seq: " << it->seq << endl;
                 packet_info.clear();
                 break;
             }
@@ -338,44 +310,15 @@ int main(int argc, const char * argv[]) {
             ++it;
         }
 
-        // // Start new loop if triggered retransmission
-        // if (retransmission_triggered) {
-        //     continue;
-        // }
+        ////////////////////////////////////////////////
+        // Receive Ack
 
-        // Check arrival in socket
-        // If received something, start processing ack packet to determine new starting point
         ssize_t received_size;
-        
         while ((received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0)) > 0) {
             lastReceive = std::chrono::steady_clock::now();
             receiveFlag = true;
             auto ackHeader = getHeader(buffer, received_size);
             logClientRecv(ackHeader, cwnd, ss_thresh);
-
-            //curr_received_seq = ackHeader.seq;
-
-            // auto inbound_wraparound_times = outbound_wraparound_times;
-            // if (curr_cum_ack < outbound_seq) {
-            //     inbound_wraparound_times -= 1;
-            // }
-
-            // // Update startpoint for successful transmission
-            // transmitted_bytes = curr_cum_ack - seq_startpoint + inbound_wraparound_times * MAX_SEQ_NUM;
-
-            // Update packet metainfo, remove successfully transmitted ones
-            // auto it = packet_info.begin();
-            // while (it != packet_info.end())
-            // {
-
-            //     if (it->offset + it->size <= curr_cum_ack + inbound_wraparound_times * MAX_SEQ_NUM)
-            //     {
-            //         it = packet_info.erase(it);
-            //     }
-            //     else {
-            //         ++it;
-            //     }
-            // }
 
             received_ack = ackHeader.ack;
             
@@ -385,8 +328,6 @@ int main(int argc, const char * argv[]) {
             } else {
                 cwnd += MAX_PAYLOAD_SIZE * MAX_PAYLOAD_SIZE / cwnd;
             }
-
-            continue;   //TODO: not sure if we should continue or just let it flow to the sending loop
         }
     }
     
