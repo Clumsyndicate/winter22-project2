@@ -16,6 +16,8 @@ struct header_t {
 #define MASK_S 0b010
 #define MASK_F 0b001
 
+bool DEBUG = true; //////////////////////////// REMEMBER TO CHANGE THIS ///////////////////////////
+
 header_t getHeader(char* buf, ssize_t size) {
     auto flags = (uint16_t) buf2int(buf, 10, 12);
     header_t h { 
@@ -64,6 +66,19 @@ void logClientRecv(header_t h, long cwnd, long ssthresh) {
     if (h.f)
         cout << " FIN";
     cout << endl;
+
+    if (DEBUG) {
+        ofstream myfile;
+        myfile.open ("client_log.txt", std::ios_base::app);
+        myfile << "RECV " << h.seq << " " << h.ack << " " << h.cid << " " << cwnd << " " << ssthresh;
+        if (h.a) 
+            myfile << " ACK";
+        if (h.s)
+            myfile << " SYN";
+        if (h.f)
+            myfile << " FIN";
+        myfile << endl;
+    }
 }
 
 void logClientSend(header_t h, long cwnd, long ssthresh, bool dup) {
@@ -77,6 +92,19 @@ void logClientSend(header_t h, long cwnd, long ssthresh, bool dup) {
     if (dup)
         cout << " DUP";
     cout << endl;
+
+    if (DEBUG) {
+        ofstream myfile;
+        myfile.open ("client_log.txt", std::ios_base::app);
+        myfile << "SEND " << h.seq << " " << h.ack << " " << h.cid << " " << cwnd << " " << ssthresh;
+        if (h.a) 
+            myfile << " ACK";
+        if (h.s)
+            myfile << " SYN";
+        if (h.f)
+            myfile << " FIN";
+        myfile << endl;
+    }
 }
 
 string getPayload(char* buf, ssize_t size) {
