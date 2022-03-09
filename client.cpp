@@ -21,6 +21,8 @@
 #include "protocol.hpp"
 
 using namespace std;
+std::chrono::steady_clock::time_point lastReceive;
+bool receiveFlag = false;
 
 struct meta_t {
     uint32_t offset;
@@ -33,7 +35,7 @@ struct meta_t {
 // Abort connection after 10 seconds of silence from server. Closes socket.
 int abort_connection(int sock) {
     close(sock);
-    exit(-1);
+    exit(1);
 }
 
 int main(int argc, const char * argv[]) {
@@ -215,6 +217,14 @@ int main(int argc, const char * argv[]) {
     // Send payload with congestion control
 
     while (transmitted_bytes < (uint32_t) file_size) {
+        if (receiveFlag) {
+            std::chrono::steady_clock::time_point current = std::chrono::steady_clock::now();
+            // timeout after 10
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(current - lastReceive).count() > 10000) {
+                abort_connection(sock);
+            }
+        }
+        
         ////////////////////////////////////////////////
         // Sending logic
 
@@ -338,6 +348,8 @@ int main(int argc, const char * argv[]) {
         ssize_t received_size;
         
         while ((received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0)) > 0) {
+            lastReceive = std::chrono::steady_clock::now();
+            receiveFlag = true;
             auto ackHeader = getHeader(buffer, received_size);
             logClientRecv(ackHeader, cwnd, ss_thresh);
 
