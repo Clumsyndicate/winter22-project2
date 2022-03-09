@@ -225,10 +225,10 @@ int main(int argc, const char * argv[]) {
             // Expected payload size is either max UDP payload size or the remaining cwnd quota
             auto expected_payload_size = min((uint32_t) MAX_PAYLOAD_SIZE, transmitted_bytes + cwnd - sent_bytes);
 
-            ofstream myfile;
-            myfile.open ("debug.txt", std::ios_base::app);
-            myfile << expected_payload_size << " expected paylod size \n";
-            myfile << " ---------- \n";
+            // ofstream myfile;
+            // myfile.open ("debug.txt", std::ios_base::app);
+            // myfile << expected_payload_size << " expected paylod size \n";
+            // myfile << " ---------- \n";
 
            
             char buffer[MAX_PACKET_SIZE];
@@ -276,6 +276,13 @@ int main(int argc, const char * argv[]) {
                 chrono::system_clock::now()
             };
 
+
+            // ofstream myfile;
+            // myfile.open ("debug.txt", std::ios_base::app);
+            // myfile << meta.expected_ack << " hi \n";
+            // myfile << " ---------- \n";
+
+
             // Record time in meta data struct
             packet_info.push_back(meta);
 
@@ -309,13 +316,14 @@ int main(int argc, const char * argv[]) {
                 break;
             }
             else if (it->expected_ack == received_ack) {
-                transmitted_bytes = it->expected_ack;
+                transmitted_bytes = it->offset + it->size;
                 packet_info.erase(packet_info.begin(), it + 1);
                 // auto start_it = packet_info.begin();
                 // while (start_it != it) {
                 //     start_it = packet_info.erase(start_it);
                 // }
                 // it = packet_info.erase(it);
+                break;
             }
             ++it;
         }
