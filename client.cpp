@@ -65,11 +65,12 @@ int main(int argc, const char * argv[]) {
         exit(1);
     }
     
-    string hostname(argv[1]);
-    if (hostname != "localhost" && hostname != "node1" && hostname != "node2") {
-        std::cerr << "ERROR: Hostname doesn't make sense" << endl;
-        exit(1);
-    }
+    // We are following spec, even though spec conflicts with the autograder.
+//    string hostname(argv[1]);
+//    if (hostname != "localhost" && hostname != "node1" && hostname != "node2") {
+//        std::cerr << "ERROR: Hostname doesn't make sense" << endl;
+//        exit(1);
+//    }
 
     ////////////////////////////////////////////////
     // validate hostname or IP address.
