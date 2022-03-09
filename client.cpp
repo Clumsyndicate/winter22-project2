@@ -55,11 +55,17 @@ int main(int argc, const char * argv[]) {
     try {
         portNumber = std::stoi(argv[2]);
         if (portNumber <= 0) {
-            std::cerr << "ERROR: Non-positive port number.";
+            std::cerr << "ERROR: Non-positive port number." << endl;;
             exit(1);
         }
     } catch (std::exception const &e) {
-        std::cerr << "ERROR: Port number specified cannot be parsed.";
+        std::cerr << "ERROR: Port number specified cannot be parsed." << endl;;
+        exit(1);
+    }
+    
+    string hostname(argv[1]);
+    if (hostname != "localhost" && hostname != "node1" && hostname != "node2") {
+        std::cerr << "ERROR: Hostname doesn't make sense" << endl;
         exit(1);
     }
 
