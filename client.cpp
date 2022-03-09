@@ -189,7 +189,7 @@ int main(int argc, const char * argv[]) {
     const auto seq_startpoint = synHeader.ack;
     uint32_t curr_received_seq = synHeader.seq + 1;
 
-    bool retransmission_triggered = false;
+    // bool retransmission_triggered = false;
     bool firstDataPacket = true;
 
 
@@ -289,7 +289,7 @@ int main(int argc, const char * argv[]) {
         // myfile << " ---------- \n";
 
         // Reset retransmission flag
-        retransmission_triggered = false;
+        // retransmission_triggered = false;
 
         // Check timeout
         auto it = packet_info.begin();
@@ -303,26 +303,27 @@ int main(int argc, const char * argv[]) {
                 sent_bytes = it->offset;
                 ss_thresh = cwnd / 2;
                 cwnd = MIN_CWND;
-                retransmission_triggered = true;
+                // retransmission_triggered = true;
                 cout << "Retransmitting from \n"; //<< sent_bytes << " ack: " << it->first << " seq: " << i->second.seq << endl;
                 packet_info.clear();
                 break;
             }
             else if (it->expected_ack == received_ack) {
                 transmitted_bytes = it->expected_ack;
-                auto start_it = packet_info.begin();
-                while (start_it != it) {
-                    start_it = packet_info.erase(start_it);
-                }
-                it = packet_info.erase(it);
+                packet_info.erase(packet_info.begin(), it + 1);
+                // auto start_it = packet_info.begin();
+                // while (start_it != it) {
+                //     start_it = packet_info.erase(start_it);
+                // }
+                // it = packet_info.erase(it);
             }
             ++it;
         }
 
-        // Start new loop if triggered retransmission
-        if (retransmission_triggered) {
-            continue;
-        }
+        // // Start new loop if triggered retransmission
+        // if (retransmission_triggered) {
+        //     continue;
+        // }
 
         // Check arrival in socket
         // If received something, start processing ack packet to determine new starting point
