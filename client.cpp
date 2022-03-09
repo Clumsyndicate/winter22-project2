@@ -155,7 +155,7 @@ int main(int argc, const char * argv[]) {
     fseek(fd, 0, SEEK_END);
     
     // Maximum file size 100MB. Using int is fine.
-    int file_size = ftell(fd);
+    uint32_t file_size = ftell(fd);
     fseek(fd, 0, SEEK_SET);
 
     // Set socket to be non-blocking for parallel packet timeout monitoring
@@ -203,7 +203,7 @@ int main(int argc, const char * argv[]) {
         // Congestion window: send a total of cwnd bytes in several packets
         while (transmitted_bytes + cwnd > sent_bytes) {
             // If have cwnd quota left but ran out of file, exit this sending loop
-            if (sent_bytes >= (uint32_t) file_size) {
+            if (sent_bytes >= file_size) {
                 break;
             }
 
@@ -318,8 +318,6 @@ int main(int argc, const char * argv[]) {
             } else {
                 cwnd += MAX_PAYLOAD_SIZE * MAX_PAYLOAD_SIZE / cwnd;
             }
-
-            continue;   //TODO: not sure if we should continue or just let it flow to the sending loop
         }
     }
     
