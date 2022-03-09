@@ -25,6 +25,8 @@ using namespace std;
 struct meta_t {
     uint32_t offset;
     uint32_t size;
+    uint32_t seq;
+    uint32_t expected_ack;
     chrono::system_clock::time_point time;
 };
 
@@ -185,152 +187,36 @@ int main(int argc, const char * argv[]) {
     uint32_t transmitted_bytes = 0; // the first byte that is not successfully transmitted
 
     const auto seq_startpoint = synHeader.ack;
-    // uint32_t cum_ack = synHeader.seq + 1;
     uint32_t curr_received_seq = synHeader.seq + 1;
 
     bool retransmission_triggered = false;
     bool firstDataPacket = true;
 
+
     // Data structure for keeping track of timestamp, include:
     // sent_bytes (file offset for start of this packet) 
     // actual_payload_size
+    // seq
+    // ack
     // timestamp
     vector<meta_t> packet_info;
 
-    auto seq_wraparound_times = 0;
-    
+    // uint32_t outbound_seq = 0;
+    uint32_t received_ack = 0;
+
+
     ////////////////////////////////////////////////
     // Send payload with congestion control
-    
-    // std::this_thread::sleep_for(std::chrono::milliseconds(12000));
-
-    // int counter = 0;
 
     while (transmitted_bytes < (uint32_t) file_size) {
-
-        // counter++;
-        // if (counter > 5) {
-        //     exit(1);
-        // }
-
-        // Reset retransmission flag
-        retransmission_triggered = false;
-
-        // Check timeout
-        auto it = packet_info.begin();
-        while (it != packet_info.end())
-        {
-            auto time_elapsed = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - it->time).count();
-            cout << time_elapsed << "\n";
-            
-            if (time_elapsed > RETRANSMISSION_TIMER) {
-                exit(1);
-                // If detected timeout
-                sent_bytes = it->offset; // starting byte (seq) of last untransmitted packet
-                ss_thresh = cwnd / 2;
-                cwnd = MIN_CWND;
-                retransmission_triggered = true;
-                cout << "Retransmitting from \n"; //<< sent_bytes << " ack: " << it->first << " seq: " << i->second.seq << endl;
-                packet_info.clear();
-                break;
-            }
-            ++it;
-        }
-
-        // for (auto i = packet_info.begin(); i != packet_info.end(); i++) {
-        //     if (chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - i->second.time).count() >= RETRANSMISSION_TIMER) {
-        //         // If detected timeout
-        //         sent_bytes = i->second.seq; // starting byte (seq) of last untransmitted packet
-        //         ss_thresh = cwnd / 2;
-        //         cwnd = MIN_CWND;
-        //         retransmission_triggered = true;
-
-        //         cout << "Retransmitting from " << sent_bytes << " ack: " << i->first << " seq: " << i->second.seq << endl;
-
-        //         packet_info.clear();
-        //         break;
-        //     }
-        // }
-
-        // Start new loop if triggered retransmission
-        if (retransmission_triggered) {
-            continue;
-        }
-
-        // Check arrival in socket
-        // If received something, start processing ack packet to determine new starting point
-        ssize_t received_size;
-        
-        while ((received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0)) > 0) {
-            auto ackHeader = getHeader(buffer, received_size);
-            logClientRecv(ackHeader, cwnd, ss_thresh);
-            auto curr_cum_ack = ackHeader.ack;
-
-            curr_received_seq = ackHeader.seq;
-
-            // Update startpoint for successful transmission
-            transmitted_bytes = curr_cum_ack - seq_startpoint + seq_wraparound_times * MAX_SEQ_NUM;
-
-            // Update packet metainfo, remove successfully transmitted ones
-            auto it = packet_info.begin();
-            while (it != packet_info.end())
-            {
-
-                if (it->offset + it->size <= curr_cum_ack + seq_wraparound_times * MAX_SEQ_NUM)
-                {
-                    // cout << "offset " << it->offset << "\n";
-                    // cout << "size " << it->size << "\n";
-                    // cout << "[cum ack] " << curr_cum_ack << "\n";
-                    
-                    it = packet_info.erase(it);
-                }
-                else {
-                    ++it;
-                }
-            }
-
-
-            // vector<uint32_t> indices;
-            
-            // for (const auto &key_val : packet_info) {
-            //     if (key_val.first <= cum_ack) {
-            //         indices.push_back(key_val.first);
-            //     }
-            // }
-            
-            // for (uint32_t key : indices) {
-            //     // cout << "Erasing " << key << endl;
-            //     packet_info.erase(key);
-            //     // exit(1);
-            // }
-
-            // Adjust parameters for successful transmission of one packet
-            if (cwnd < ss_thresh) {
-                cwnd += MAX_PAYLOAD_SIZE;
-            } else {
-                cwnd += MAX_PAYLOAD_SIZE * MAX_PAYLOAD_SIZE / cwnd;
-            }
-
-            continue;   //TODO: not sure if we should continue or just let it flow to the sending loop
-        }
-
         ////////////////////////////////////////////////
         // Sending logic
 
         // Reposition the file descriptor to be at the start of data to be sent
         fseek(fd, sent_bytes, SEEK_SET);        //TODO: not optimal, moving fd every time
 
-        // int counter2 = 0;
-
         // Congestion window: send a total of cwnd bytes in several packets
         while (transmitted_bytes + cwnd > sent_bytes) {
-
-
-            // counter2++;
-            // if (counter2 > 5) {
-            //     exit(1);
-            // }
-
             // If have cwnd quota left but ran out of file, exit this sending loop
             if (sent_bytes >= (uint32_t) file_size) {
                 break;
@@ -338,28 +224,34 @@ int main(int argc, const char * argv[]) {
 
             // Expected payload size is either max UDP payload size or the remaining cwnd quota
             auto expected_payload_size = min((uint32_t) MAX_PAYLOAD_SIZE, transmitted_bytes + cwnd - sent_bytes);
+
+            ofstream myfile;
+            myfile.open ("debug.txt", std::ios_base::app);
+            myfile << expected_payload_size << " expected paylod size \n";
+            myfile << " ---------- \n";
+
+           
             char buffer[MAX_PACKET_SIZE];
             char * payloadBuffer = new char [expected_payload_size];
             bzero(payloadBuffer, expected_payload_size);
 
             // actual_size might be smaller than the expected payload_size, since we may reach the EOF
-            auto actual_payload_size = fread(payloadBuffer, 1, expected_payload_size, fd);
+            uint32_t actual_payload_size = fread(payloadBuffer, 1, expected_payload_size, fd);
             if (actual_payload_size < 0) {
                 std::cerr << "ERROR: Failed to read from file.";
                 fclose(fd);
                 abort_connection(sock);
             }
 
-            auto outbound_seq = seq_startpoint + sent_bytes;
-            if (outbound_seq > MAX_SEQ_NUM) {
-                seq_wraparound_times += 1;
-                // cout << "=========================\n";
-                outbound_seq = outbound_seq % MAX_SEQ_NUM - 1;
-            }
+            // outbound_seq = seq_startpoint + sent_bytes;
+            // if (outbound_seq > MAX_SEQ_NUM) {
+            //     outbound_wraparound_times += 1;
+            //     outbound_seq = outbound_seq % MAX_SEQ_NUM;
+            // }
 
             // Construct header
             header_t payloadHeader {
-                outbound_seq,
+                (seq_startpoint + sent_bytes) % MAX_SEQ_NUM,
                 curr_received_seq,
                 my_cid,
                 false, false, false
@@ -379,6 +271,8 @@ int main(int argc, const char * argv[]) {
             meta_t meta {
                 sent_bytes,
                 (uint32_t) actual_payload_size,
+                payloadHeader.seq,
+                payloadHeader.seq + actual_payload_size,
                 chrono::system_clock::now()
             };
 
@@ -387,7 +281,99 @@ int main(int argc, const char * argv[]) {
 
             sent_bytes += actual_payload_size;
         }
+
+        // ofstream myfile;
+        // myfile.open ("debug.txt", std::ios_base::app);
+        // myfile << transmitted_bytes << " transmitted \n";
+        // myfile << sent_bytes << " sent \n";
+        // myfile << " ---------- \n";
+
+        // Reset retransmission flag
+        retransmission_triggered = false;
+
+        // Check timeout
+        auto it = packet_info.begin();
+        while (it != packet_info.end())
+        {
+            auto time_elapsed = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - it->time).count();
+            
+            if (time_elapsed > RETRANSMISSION_TIMER) {
+                exit(1);
+                // If detected timeout
+                sent_bytes = it->offset;
+                ss_thresh = cwnd / 2;
+                cwnd = MIN_CWND;
+                retransmission_triggered = true;
+                cout << "Retransmitting from \n"; //<< sent_bytes << " ack: " << it->first << " seq: " << i->second.seq << endl;
+                packet_info.clear();
+                break;
+            }
+            else if (it->expected_ack == received_ack) {
+                transmitted_bytes = it->expected_ack;
+                auto start_it = packet_info.begin();
+                while (start_it != it) {
+                    start_it = packet_info.erase(start_it);
+                }
+                it = packet_info.erase(it);
+            }
+            ++it;
+        }
+
+        // Start new loop if triggered retransmission
+        if (retransmission_triggered) {
+            continue;
+        }
+
+        // Check arrival in socket
+        // If received something, start processing ack packet to determine new starting point
+        ssize_t received_size;
+        
+        while ((received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0)) > 0) {
+            auto ackHeader = getHeader(buffer, received_size);
+            logClientRecv(ackHeader, cwnd, ss_thresh);
+
+            //curr_received_seq = ackHeader.seq;
+
+            // auto inbound_wraparound_times = outbound_wraparound_times;
+            // if (curr_cum_ack < outbound_seq) {
+            //     inbound_wraparound_times -= 1;
+            // }
+
+            // // Update startpoint for successful transmission
+            // transmitted_bytes = curr_cum_ack - seq_startpoint + inbound_wraparound_times * MAX_SEQ_NUM;
+
+            // Update packet metainfo, remove successfully transmitted ones
+            // auto it = packet_info.begin();
+            // while (it != packet_info.end())
+            // {
+
+            //     if (it->offset + it->size <= curr_cum_ack + inbound_wraparound_times * MAX_SEQ_NUM)
+            //     {                  
+            //         it = packet_info.erase(it);
+            //     }
+            //     else {
+            //         ++it;
+            //     }
+            // }
+
+            received_ack = ackHeader.ack;
+
+
+            // Adjust parameters for successful transmission of one packet
+            if (cwnd < ss_thresh) {
+                cwnd += MAX_PAYLOAD_SIZE;
+            } else {
+                cwnd += MAX_PAYLOAD_SIZE * MAX_PAYLOAD_SIZE / cwnd;
+            }
+
+            continue;   //TODO: not sure if we should continue or just let it flow to the sending loop
+        }
     }
+    
+
+
+
+
     
     // File transfer completed. Start disconnecting.
     header_t finHeader {
