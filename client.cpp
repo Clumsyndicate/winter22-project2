@@ -33,7 +33,7 @@ struct meta_t {
 // Abort connection after 10 seconds of silence from server. Closes socket.
 int abort_connection(int sock) {
     close(sock);
-    exit(0);
+    exit(-1);
 }
 
 int main(int argc, const char * argv[]) {
