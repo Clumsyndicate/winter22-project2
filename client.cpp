@@ -142,7 +142,7 @@ int main(int argc, const char * argv[]) {
     }
 
     auto synHeader = getHeader(buffer, recsize);
-    logClientRecv(synHeader, 0, 0);
+    logClientRecv(synHeader, MIN_CWND, INIT_SSTHRESH);
     auto my_cid = synHeader.cid; // use server-assigned connection ID
 
     ////////////////////////////////////////////////
@@ -305,7 +305,6 @@ int main(int argc, const char * argv[]) {
             auto time_elapsed = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - it->time).count();
             
             if (time_elapsed > RETRANSMISSION_TIMER) {
-                exit(1);
                 // If detected timeout
                 sent_bytes = it->offset;
                 ss_thresh = cwnd / 2;
@@ -386,9 +385,7 @@ int main(int argc, const char * argv[]) {
     packetSize = formatSendPacket(buffer, finHeader, nullptr, 0);
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     logClientSend(finHeader, cwnd, ss_thresh, false);
-    
-    // cout << "Sent fin packet" << endl;
-    
+        
     if (bytes_sent < 0) {
         std::cerr << "Failed to send FIN packet." << endl;
         close(sock);
@@ -403,12 +400,7 @@ int main(int argc, const char * argv[]) {
         finAckHeader = getHeader(buffer, recsize);
         logClientRecv(finAckHeader, 0, 0);
     }
-    
-    
-    if (finAckHeader.f) {
-        //todo: what to do? Spec doesn't say a thing lmao
-        cout << "Received FIN-ACK from server." << endl;
-    }
+
     
     // Wait for two seconds, responde every FIN packet with an ACK and drop all others.
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
