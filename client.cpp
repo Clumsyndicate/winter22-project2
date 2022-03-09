@@ -142,7 +142,7 @@ int main(int argc, const char * argv[]) {
     }
 
     auto synHeader = getHeader(buffer, recsize);
-    logClientRecv(synHeader, MIN_CWND, INIT_SSTHRESH);
+    logClientRecv(synHeader, MIN_CWND, INIT_SS_THRESH);
     auto my_cid = synHeader.cid; // use server-assigned connection ID
 
     ////////////////////////////////////////////////
@@ -194,7 +194,7 @@ int main(int argc, const char * argv[]) {
 
 
     // Data structure for keeping track of timestamp, include:
-    // sent_bytes (file offset for start of this packet) 
+    // sent_bytes (file offset for start of this packet)
     // actual_payload_size
     // seq
     // ack
@@ -351,7 +351,7 @@ int main(int argc, const char * argv[]) {
             // {
 
             //     if (it->offset + it->size <= curr_cum_ack + inbound_wraparound_times * MAX_SEQ_NUM)
-            //     {                  
+            //     {
             //         it = packet_info.erase(it);
             //     }
             //     else {
@@ -398,9 +398,27 @@ int main(int argc, const char * argv[]) {
     header_t finAckHeader;
     if (recsize > 0) {
         finAckHeader = getHeader(buffer, recsize);
-        logClientRecv(finAckHeader, 0, 0);
+        logClientRecv(finAckHeader, cwnd, ss_thresh);
+        
+        // Makes it look like reference client.
+        header_t ackFinAckHeader {
+            finAckHeader.ack,
+            finAckHeader.seq + (uint32_t) 1,
+            my_cid,
+            true, false, false
+        };
+        
+        packetSize = formatSendPacket(buffer, ackFinAckHeader, nullptr, 0);
+        bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
+        
+        if (bytes_sent < 0) {
+            std::cerr << "Failed to send the ACK for the FIN-ACK packet.";
+            close(sock);
+            exit(1);
+        }
+        
+        logClientSend(ackFinAckHeader, cwnd, ss_thresh, false);
     }
-
     
     // Wait for two seconds, responde every FIN packet with an ACK and drop all others.
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
@@ -413,7 +431,7 @@ int main(int argc, const char * argv[]) {
         
         if (recsize > 0) {
             finWaitHeader = getHeader(buffer, recsize);
-            logClientRecv(finWaitHeader, 0, 0);
+            logClientRecv(finWaitHeader, cwnd, ss_thresh);
 
             if (finWaitHeader.f) {
                 // Weird name but meh
