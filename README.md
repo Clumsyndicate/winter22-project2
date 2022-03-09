@@ -1,40 +1,28 @@
-# CS118 Project 2
+Team Member: Qiaosong Zhou (605376815), Yicheng Zhu (505124173), Zihan Liu (105144205)
 
-## Makefile
+Contribution:
+Qiaosong Zhou: Reading and writing buffer, header construction, connection management (server) , large file transmission.
+Yicheng Zhu: worked on congestion control, client-side timeout (work mostly in the cc branch)
+Zihan Liu: Zihan worked on the file transfer, the FIN process, and server-side timeout.
 
-This provides a couple make targets for things.
-By default (all target), it makes the `server` and `client` executables.
+High-Level designs:
 
-It provides a `clean` target, and `tarball` target to create the submission file as well.
+The server maintains a hashmap of cid keys to connection information. The server uses these stateful information to keep track of the file pointers and connection status of each client. The server, most notably, does not use any multithreading. It simply has a infinite while loop that process the incoming packet, rather like a DFA.
 
-You will need to modify the `Makefile` to add your userid for the `.tar.gz` turn-in at the top of the file.
+The congestion control is implemented by using a vector to maintain the currently unack’d but sent packets. Every time a ack is inbound, the vector deletes ack’d packets. Every time packets are sent, new information is added to the vector. 
 
-## Provided Files
+Problems encountered:
+A current problem is that the client may receive an acknowledge number that does not match with any packets it sends out 
 
-`server.cpp` and `client.cpp` are the entry points for the server and client part of the project.
+Additional libraries:
 
-## Academic Integrity Note
+<poll.h> for keeping track of time outs. 
+<chrono> for computing time elapsed.
 
-You are encouraged to host your code in private repositories on [GitHub](https://github.com/), [GitLab](https://gitlab.com), or other places.  At the same time, you are PROHIBITED to make your code for the class project public during the class or any time after the class.  If you do so, you will be violating academic honestly policy that you have signed, as well as the student code of conduct and be subject to serious sanctions.
 
-## Wireshark dissector
 
-For debugging purposes, you can use the wireshark dissector from `tcp.lua`. The dissector requires
-at least version 1.12.6 of Wireshark with LUA support enabled.
 
-To enable the dissector for Wireshark session, use `-X` command line option, specifying the full
-path to the `tcp.lua` script:
 
-    wireshark -X lua_script:./confundo.lua
 
-To dissect tcpdump-recorded file, you can use `-r <pcapfile>` option. For example:
 
-    wireshark -X lua_script:./confundo.lua -r confundo.pcap
 
-## TODO
-
-    ###########################################################
-    ##                                                       ##
-    ## REPLACE CONTENT OF THIS FILE WITH YOUR PROJECT REPORT ##
-    ##                                                       ##
-    ###########################################################
