@@ -33,7 +33,7 @@ struct meta_t {
 // Abort connection after 10 seconds of silence from server. Closes socket.
 int abort_connection(int sock) {
     close(sock);
-    exit(-1);
+    exit(1);
 }
 
 int main(int argc, const char * argv[]) {
@@ -98,9 +98,6 @@ int main(int argc, const char * argv[]) {
     
     ////////////////////////////////////////////////
     // Initialize socket, send dummy data to server.
-    
-    // strcpy(buffer, "hello world!");
-//    string payload { "hello world!" };
     
     memset(&socketAddress, 0, sizeof socketAddress);
 
@@ -196,8 +193,9 @@ int main(int argc, const char * argv[]) {
     // Send payload with congestion control
 
     while (transmitted_bytes < (uint32_t) file_size) {
+
         ////////////////////////////////////////////////
-        // Sending logic
+        // Sending Packets with CWND
 
         // Reposition the file descriptor to be at the start of data to be sent
         fseek(fd, sent_bytes, SEEK_SET);        //TODO: not optimal, moving fd every time
@@ -276,10 +274,9 @@ int main(int argc, const char * argv[]) {
         // myfile << sent_bytes << " sent \n";
         // myfile << " ---------- \n";
 
-        // Reset retransmission flag
-        // retransmission_triggered = false;
+        ////////////////////////////////////////////////
+        // Check Timeout
 
-        // Check timeout
         auto it = packet_info.begin();
         while (it != packet_info.end())
         {
@@ -305,10 +302,10 @@ int main(int argc, const char * argv[]) {
             ++it;
         }
 
-        // Check arrival in socket
-        // If received something, start processing ack packet to determine new starting point
+        ////////////////////////////////////////////////
+        // Receive Ack
+
         ssize_t received_size;
-        
         while ((received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0)) > 0) {
             auto ackHeader = getHeader(buffer, received_size);
             logClientRecv(ackHeader, cwnd, ss_thresh);
