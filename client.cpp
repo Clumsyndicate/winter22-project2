@@ -318,11 +318,6 @@ int main(int argc, const char * argv[]) {
             else if (it->expected_ack == received_ack) {
                 transmitted_bytes = it->offset + it->size;
                 packet_info.erase(packet_info.begin(), it + 1);
-                // auto start_it = packet_info.begin();
-                // while (start_it != it) {
-                //     start_it = packet_info.erase(start_it);
-                // }
-                // it = packet_info.erase(it);
                 break;
             }
             ++it;
@@ -366,8 +361,7 @@ int main(int argc, const char * argv[]) {
             // }
 
             received_ack = ackHeader.ack;
-
-
+            
             // Adjust parameters for successful transmission of one packet
             if (cwnd < ss_thresh) {
                 cwnd += MAX_PAYLOAD_SIZE;
@@ -379,14 +373,10 @@ int main(int argc, const char * argv[]) {
         }
     }
     
-
-
-
-
     
     // File transfer completed. Start disconnecting.
     header_t finHeader {
-            0,
+            received_ack,
             0,
             my_cid,
             false, false, true
@@ -429,15 +419,15 @@ int main(int argc, const char * argv[]) {
         recsize = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0);
         header_t finWaitHeader;
         
-        if (recsize > 1) {
+        if (recsize > 0) {
             finWaitHeader = getHeader(buffer, recsize);
             logClientRecv(finWaitHeader, 0, 0);
 
             if (finWaitHeader.f) {
                 // Weird name but meh
                 header_t ackFinAckHeader {
-                    0,
-                    0,
+                    finWaitHeader.ack,
+                    finWaitHeader.seq + (uint32_t) 1,
                     my_cid,
                     true, false, false
                 };

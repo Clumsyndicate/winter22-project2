@@ -231,8 +231,8 @@ int main(int argc, const char * argv[]) {
                 // Check if file ptr is nullptr, if so wait for ack first.
                 if (conn.head == header.seq) {
                     conn.head += payload.size();
-                    if (conn.head > 102401) {
-                        conn.head = conn.head % 102401;
+                    if (conn.head > MAX_SEQ_NUM) {
+                        conn.head = conn.head % MAX_SEQ_NUM;
                         conn.wrap++;
                     }
                     // If this packet is the next seq expected
