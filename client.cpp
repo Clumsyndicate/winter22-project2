@@ -33,7 +33,7 @@ struct meta_t {
 // Abort connection after 10 seconds of silence from server. Closes socket.
 int abort_connection(int sock) {
     close(sock);
-    exit(-1);
+    exit(0);
 }
 
 int main(int argc, const char * argv[]) {
@@ -120,7 +120,6 @@ int main(int argc, const char * argv[]) {
         false, true, false
     };
 
-    
     auto packetSize = formatSendPacket(buffer, header, nullptr, 0);
     bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
     if (bytes_sent < 0) {
@@ -150,24 +149,6 @@ int main(int argc, const char * argv[]) {
     auto synHeader = getHeader(buffer, recsize);
     logClientRecv(synHeader, MIN_CWND, INIT_SS_THRESH);
     auto my_cid = synHeader.cid; // use server-assigned connection ID
-
-    ////////////////////////////////////////////////
-    // Send Ack packet (no payload)
-    
-    // header_t ackHeader {
-    //     synHeader.ack,
-    //     synHeader.seq + 1,
-    //     my_cid,
-    //     true, false, false
-    // };
-
-    // packetSize = formatSendPacket(buffer, ackHeader, nullptr, 0);
-    // bytes_sent = sendto(sock, buffer, packetSize, 0,(struct sockaddr*)&socketAddress, sizeof socketAddress);
-    // if (bytes_sent < 0) {
-    //     perror("Sending to server failed.");
-    //     exit(1);
-    // }
-    // logClientSend(ackHeader, MIN_CWND, INIT_SS_THRESH, false);
 
     ////////////////////////////////////////////////
     // Set up congestion control
@@ -249,12 +230,6 @@ int main(int argc, const char * argv[]) {
                 abort_connection(sock);
             }
 
-            // outbound_seq = seq_startpoint + sent_bytes;
-            // if (outbound_seq > MAX_SEQ_NUM) {
-            //     outbound_wraparound_times += 1;
-            //     outbound_seq = outbound_seq % MAX_SEQ_NUM;
-            // }
-
             // Construct header
             header_t payloadHeader {
                 (seq_startpoint + sent_bytes) % MAX_SEQ_NUM,
@@ -310,13 +285,15 @@ int main(int argc, const char * argv[]) {
         {
             auto time_elapsed = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - it->time).count();
             
+            //cout << time_elapsed << " time elapsed\n";
+
             if (time_elapsed > RETRANSMISSION_TIMER) {
                 // If detected timeout
                 sent_bytes = it->offset;
                 ss_thresh = cwnd / 2;
                 cwnd = MIN_CWND;
                 // retransmission_triggered = true;
-                cout << "Retransmitting from \n"; //<< sent_bytes << " ack: " << it->first << " seq: " << i->second.seq << endl;
+                cout << "Retransmitting from \n" << sent_bytes << " seq: " << it->seq << endl;
                 packet_info.clear();
                 break;
             }
@@ -328,11 +305,6 @@ int main(int argc, const char * argv[]) {
             ++it;
         }
 
-        // // Start new loop if triggered retransmission
-        // if (retransmission_triggered) {
-        //     continue;
-        // }
-
         // Check arrival in socket
         // If received something, start processing ack packet to determine new starting point
         ssize_t received_size;
@@ -340,30 +312,6 @@ int main(int argc, const char * argv[]) {
         while ((received_size = recvfrom(sock, buffer, sizeof buffer, 0, nullptr, 0)) > 0) {
             auto ackHeader = getHeader(buffer, received_size);
             logClientRecv(ackHeader, cwnd, ss_thresh);
-
-            //curr_received_seq = ackHeader.seq;
-
-            // auto inbound_wraparound_times = outbound_wraparound_times;
-            // if (curr_cum_ack < outbound_seq) {
-            //     inbound_wraparound_times -= 1;
-            // }
-
-            // // Update startpoint for successful transmission
-            // transmitted_bytes = curr_cum_ack - seq_startpoint + inbound_wraparound_times * MAX_SEQ_NUM;
-
-            // Update packet metainfo, remove successfully transmitted ones
-            // auto it = packet_info.begin();
-            // while (it != packet_info.end())
-            // {
-
-            //     if (it->offset + it->size <= curr_cum_ack + inbound_wraparound_times * MAX_SEQ_NUM)
-            //     {
-            //         it = packet_info.erase(it);
-            //     }
-            //     else {
-            //         ++it;
-            //     }
-            // }
 
             received_ack = ackHeader.ack;
             
